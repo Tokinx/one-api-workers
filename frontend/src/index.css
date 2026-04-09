@@ -44,7 +44,6 @@
   /* Border & Input */
   --color-border: hsl(220 13% 91%);
   --color-input: hsl(220 13% 91%);
-  --color-ring: hsl(234 89% 60%);
 
   /* Sidebar */
   --color-sidebar: hsl(224 71% 4%);
@@ -89,7 +88,6 @@
 
   --color-border: hsl(224 30% 16%);
   --color-input: hsl(224 30% 16%);
-  --color-ring: hsl(234 89% 67%);
 
   --color-sidebar: hsl(224 71% 3%);
   --color-sidebar-foreground: hsl(210 20% 98%);
