@@ -71,7 +71,7 @@ type Usage = {
     cached_tokens?: number,
 }
 
-type AwslKeyPayload = {
+type oawKeyPayload = {
     channel_key: string;
     multipler: number | undefined | null;
 }

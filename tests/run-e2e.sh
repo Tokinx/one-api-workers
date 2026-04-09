@@ -174,10 +174,10 @@ assert_http "azure responses stream → 200 + SSE" "200" "event:" "$R"
 echo ""
 echo "--- Quota check ---"
 
-npx wrangler d1 execute awsl-one-api --local --command "UPDATE api_token SET usage = 99999999 WHERE key = 'sk-mock-all'" > /dev/null 2>&1
+npx wrangler d1 execute one-api-workers --local --command "UPDATE api_token SET usage = 99999999 WHERE key = 'sk-mock-all'" > /dev/null 2>&1
 R=$(do_post -H "Authorization: Bearer sk-mock-all" "$API/v1/chat/completions" -H "Content-Type: application/json" -d '{"model":"gpt-4o","messages":[]}')
 assert_http "quota exceeded → 402" "402" "Quota exceeded" "$R"
-npx wrangler d1 execute awsl-one-api --local --command "UPDATE api_token SET usage = 0 WHERE key = 'sk-mock-all'" > /dev/null 2>&1
+npx wrangler d1 execute one-api-workers --local --command "UPDATE api_token SET usage = 0 WHERE key = 'sk-mock-all'" > /dev/null 2>&1
 
 # ---- Error recovery ----
 echo ""
@@ -197,10 +197,10 @@ echo "========================================="
 echo ""
 echo "Cleaning up test data..."
 for key in test-openai test-azure test-claude test-c2o test-responses test-azure-resp; do
-  npx wrangler d1 execute awsl-one-api --local --command "DELETE FROM channel_config WHERE key = '$key'" > /dev/null 2>&1
+  npx wrangler d1 execute one-api-workers --local --command "DELETE FROM channel_config WHERE key = '$key'" > /dev/null 2>&1
 done
 for key in sk-mock-all sk-mock-openai sk-mock-quota; do
-  npx wrangler d1 execute awsl-one-api --local --command "DELETE FROM api_token WHERE key = '$key'" > /dev/null 2>&1
+  npx wrangler d1 execute one-api-workers --local --command "DELETE FROM api_token WHERE key = '$key'" > /dev/null 2>&1
 done
 echo "Cleanup done."
 

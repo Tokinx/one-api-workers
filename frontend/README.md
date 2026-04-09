@@ -1,6 +1,6 @@
-# AWSL One API Frontend
+# One API on Workers Frontend
 
-Modern React + Vite + TypeScript frontend for AWSL One API management platform.
+Modern React + Vite + TypeScript frontend for One API on Workers management platform.
 
 ## Features
 

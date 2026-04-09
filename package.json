@@ -1,5 +1,5 @@
 {
-  "name": "awsl-ai-proxy",
+  "name": "one-api-workers",
   "workspaces": [
     "frontend"
   ],

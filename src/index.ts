@@ -81,7 +81,7 @@ const app = new Hono<HonoCustomType>()
 const openapi = fromHono(app, {
   schema: {
     info: {
-      title: 'Awsl One API',
+      title: 'One API on Workers',
       version: '1.0.0',
     }
   },

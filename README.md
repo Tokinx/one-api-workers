@@ -1,4 +1,4 @@
-# AWSL One API
+# One API on Workers
 
 一个基于 Cloudflare Workers 的 OpenAI API 代理服务，支持多渠道管理、Token 管理和使用量统计。
 
@@ -22,7 +22,7 @@ flowchart LR
     end
 
     subgraph CF["Cloudflare Workers"]
-        B[AWSL One API]
+        B[One API on Workers]
         D[(Cloudflare D1<br/>Database)]
     end
 
@@ -41,7 +41,7 @@ flowchart LR
 <summary><h2>📁 项目结构</h2></summary>
 
 ```text
-awsl-one-api/
+one-api-workers/
 ├── src/                          # 源代码目录
 │   ├── admin/                    # 管理接口
 │   │   ├── channel_api.ts        # 渠道管理 API
@@ -93,7 +93,7 @@ bun install
 ```jsonc
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "awsl-one-api",
+  "name": "one-api-workers",
   "main": "src/index.ts",
   "compatibility_date": "2025-04-28",
   "workers_dev": false,
@@ -120,7 +120,7 @@ bun install
 ```jsonc
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "awsl-one-api",
+  "name": "one-api-workers",
   "main": "src/index.ts",
   "compatibility_date": "2025-04-28",
   "workers_dev": false,
@@ -134,7 +134,7 @@ bun install
 3. 创建 Cloudflare D1 数据库：
 
 ```bash
-wrangler d1 create awsl-one-api
+wrangler d1 create one-api-workers
 ```
 
 4. 在 Cloudflare Dashboard 中手动绑定生产域名：

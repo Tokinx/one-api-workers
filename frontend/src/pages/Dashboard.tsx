@@ -62,7 +62,7 @@ export function Dashboard() {
               </div>
               <h1 className="text-4xl md:text-5xl lg:text-[3.5rem] font-bold tracking-tight leading-[1.1] mb-5">
                 <span className="bg-gradient-to-r from-foreground via-foreground to-foreground/70 bg-clip-text text-transparent">
-                  Awsl One API
+                  One API on Workers
                 </span>
               </h1>
               <p className="text-lg md:text-xl text-muted-foreground leading-relaxed mb-8 max-w-2xl">

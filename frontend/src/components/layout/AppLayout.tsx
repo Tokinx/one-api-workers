@@ -77,7 +77,7 @@ export function AppLayout({ children }: AppLayoutProps) {
               <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center">
                 <Zap className="h-3.5 w-3.5 text-white" />
               </div>
-              <span className="font-semibold text-sm tracking-tight">Awsl One API</span>
+              <span className="font-semibold text-sm tracking-tight">One API on Workers</span>
             </div>
             <div className="h-9 w-9" />
           </header>
