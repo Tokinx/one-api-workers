@@ -27,18 +27,20 @@ flowchart LR
 
     subgraph CF["Cloudflare Workers"]
         B[One API on Workers]
-        D[(Cloudflare D1<br/>Database)]
+        D1[(Cloudflare<br/>D1 Database)]
+        D2[(Cloudflare<br/>Analytics Engine)]
     end
 
     subgraph Providers["AI 服务商"]
-        C1[Azure OpenAI]
+        C1[Anthropic]
         C2[OpenAI]
     end
 
     A -->|API Request| B
     B -->|Proxy| C1
     B -->|Proxy| C2
-    B <-->|Read/Write| D
+    B <-->|Read/Write| D1
+    B -->|Write| D2
 ```
 
 <details>
