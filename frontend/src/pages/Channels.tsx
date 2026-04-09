@@ -731,8 +731,8 @@ export function Channels() {
         <div className="space-y-6">
           <Card>
             <CardContent className="p-5">
-              <h3 className="font-medium mb-4">渠道标识</h3>
-              <p className="text-sm text-muted-foreground mb-3">用于内部识别的唯一标识</p>
+              <h3 className="font-medium">渠道标识</h3>
+              <p className="text-sm text-muted-foreground mb-4">用于内部识别的唯一标识</p>
               <Input
                 value={channelKey}
                 onChange={(e) => setChannelKey(e.target.value)}

@@ -65,7 +65,7 @@ export function Dashboard() {
               </span>
             </h1>
             <p className="text-lg md:text-xl text-muted-foreground leading-relaxed mb-8 max-w-2xl">
-              基于 Cloudflare Workers<br/>分布式、高性能、低延迟的 AI 统一网关
+              基于 Cloudflare Workers<br/>分布式、低延迟、高性能的 AI 统一网关
             </p>
             <div className="flex flex-wrap gap-3">
               <Button

@@ -120,7 +120,7 @@ export function AppLayout({ children }: AppLayoutProps) {
           <form onSubmit={handleAuthSubmit}>
             <div className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="adminToken">管理员令牌</Label>
+                <Label className="block" htmlFor="adminToken">管理员令牌</Label>
                 <Input
                   id="adminToken"
                   type="password"
@@ -138,11 +138,12 @@ export function AppLayout({ children }: AppLayoutProps) {
               )}
             </div>
 
-            <DialogFooter className="mt-6">
+            <DialogFooter className="mt-6 gap-2">
               <Button
                 type="button"
                 variant="outline"
                 onClick={closeAuthModal}
+                className='mr-0'
               >
                 取消
               </Button>
