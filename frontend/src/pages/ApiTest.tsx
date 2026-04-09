@@ -1,17 +1,18 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Select } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
 import { useToast } from '@/components/ui/use-toast'
 import { apiClient } from '@/api/client'
-import { AudioTestResponse, TestResponse } from '@/types'
+import { AudioTestResponse, Channel, TestResponse, Token } from '@/types'
+import { AutoCompleteInput, type AutoCompleteOption } from '@/components/ui/autocomplete'
 import { Send, Clock, CheckCircle, XCircle, Copy, Download } from 'lucide-react'
 import { PageContainer } from '@/components/ui/page-container'
 import { cn, copyToClipboard } from '@/lib/utils'
+import { getModelNamesForToken, parseTokenConfig } from '@/lib/channel-models'
 
 const requestTemplates: Record<string, any> = {
   '/v1/chat/completions': {
@@ -52,18 +53,31 @@ const requestTemplates: Record<string, any> = {
   },
 }
 
+const buildRequestBody = (endpoint: string, model = '') => {
+  const template = requestTemplates[endpoint] || {}
+  const { model: _templateModel, ...rest } = template
+
+  return JSON.stringify(
+    model ? { ...rest, model } : rest,
+    null,
+    2
+  )
+}
+
 export function ApiTest() {
   const [endpoint, setEndpoint] = useState('/v1/chat/completions')
   const [apiToken, setApiToken] = useState('')
-  const [requestBody, setRequestBody] = useState(
-    JSON.stringify(requestTemplates['/v1/chat/completions'], null, 2)
-  )
+  const [modelValue, setModelValue] = useState('')
+  const [requestBody, setRequestBody] = useState(buildRequestBody('/v1/chat/completions'))
   const [isLoading, setIsLoading] = useState(false)
   const [response, setResponse] = useState<any>(null)
   const [responseTime, setResponseTime] = useState<number>(0)
   const [statusCode, setStatusCode] = useState<number | null>(null)
 
   const { addToast } = useToast()
+
+  const [tokens, setTokens] = useState<Token[]>([])
+  const [channels, setChannels] = useState<Channel[]>([])
 
   const isAudioResponse = (value: TestResponse | { error: string } | null): value is AudioTestResponse => {
     return !!value && value.object === 'audio' && typeof value.url === 'string'
@@ -77,9 +91,56 @@ export function ApiTest() {
     }
   }, [response])
 
+  useEffect(() => {
+    const loadOptions = async () => {
+      try {
+        const [tokenResponse, channelResponse] = await Promise.all([
+          apiClient.getTokens(),
+          apiClient.getChannels(),
+        ])
+
+        setTokens((tokenResponse.data as Token[]) || [])
+        setChannels((channelResponse.data as Channel[]) || [])
+      } catch (error) {
+        console.error('Failed to load API test options:', error)
+      }
+    }
+
+    loadOptions()
+  }, [])
+
+  const availableModels = useMemo(
+    () => getModelNamesForToken(apiToken, tokens, channels),
+    [apiToken, tokens, channels]
+  )
+
+  useEffect(() => {
+    if (availableModels.length === 0) {
+      return
+    }
+
+    if (modelValue) {
+      return
+    }
+
+    const nextModel = availableModels[0]
+    setModelValue(nextModel)
+    setRequestBody((currentBody) => {
+      try {
+        const parsedBody = JSON.parse(currentBody)
+        parsedBody.model = nextModel
+        return JSON.stringify(parsedBody, null, 2)
+      } catch {
+        return buildRequestBody(endpoint, nextModel)
+      }
+    })
+  }, [availableModels])
+
   const handleEndpointChange = (newEndpoint: string) => {
     setEndpoint(newEndpoint)
-    setRequestBody(JSON.stringify(requestTemplates[newEndpoint], null, 2))
+    const nextModel = availableModels[0] || ''
+    setModelValue(nextModel)
+    setRequestBody(buildRequestBody(newEndpoint, nextModel))
   }
 
   const handleCopyResponse = async () => {
@@ -98,6 +159,31 @@ export function ApiTest() {
       } catch {
         addToast('复制失败', 'error')
       }
+    }
+  }
+
+  const updateRequestBodyModel = (nextModel: string) => {
+    setModelValue(nextModel)
+
+    try {
+      const parsedBody = JSON.parse(requestBody)
+      parsedBody.model = nextModel
+      setRequestBody(JSON.stringify(parsedBody, null, 2))
+    } catch {
+      setRequestBody(buildRequestBody(endpoint, nextModel))
+    }
+  }
+
+  const handleRequestBodyChange = (value: string) => {
+    setRequestBody(value)
+
+    try {
+      const parsedBody = JSON.parse(value)
+      if (typeof parsedBody?.model === 'string') {
+        setModelValue(parsedBody.model)
+      }
+    } catch {
+      // Keep the current model selection while the JSON is temporarily invalid.
     }
   }
 
@@ -139,6 +225,21 @@ export function ApiTest() {
     }
   }
 
+  const tokenOptions: AutoCompleteOption[] = tokens.map((token) => {
+    const tokenConfig = parseTokenConfig(token)
+
+    return {
+      value: token.key,
+      label: tokenConfig.name || token.key,
+      description: token.key,
+      keywords: [token.key, tokenConfig.name || ''],
+    }
+  })
+
+  const modelOptions: AutoCompleteOption[] = availableModels.map((model) => ({
+    value: model,
+  }))
+
   return (
     <PageContainer
       title="API 测试"
@@ -170,11 +271,25 @@ export function ApiTest() {
 
               <div className="space-y-2">
                 <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">API 令牌</Label>
-                <Input
-                  type="password"
+                <AutoCompleteInput
                   value={apiToken}
-                  onChange={(e) => setApiToken(e.target.value)}
+                  onChange={setApiToken}
                   placeholder="sk-..."
+                  inputClassName="font-mono"
+                  options={tokenOptions}
+                  emptyText="没有匹配的令牌"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">模型</Label>
+                <AutoCompleteInput
+                  value={modelValue}
+                  onChange={updateRequestBodyModel}
+                  placeholder="选择或输入模型名称"
+                  inputClassName="font-mono"
+                  options={modelOptions}
+                  emptyText="没有匹配的模型"
                 />
               </div>
 
@@ -182,7 +297,7 @@ export function ApiTest() {
                 <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">请求体</Label>
                 <Textarea
                   value={requestBody}
-                  onChange={(e) => setRequestBody(e.target.value)}
+                  onChange={(e) => handleRequestBodyChange(e.target.value)}
                   rows={14}
                   className="font-mono text-sm"
                 />

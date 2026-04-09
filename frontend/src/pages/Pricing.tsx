@@ -1,13 +1,15 @@
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiClient } from '@/api/client'
-import { PricingConfig } from '@/types'
+import { Channel, PricingConfig } from '@/types'
+import { AutoCompleteInput, type AutoCompleteOption } from '@/components/ui/autocomplete'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { useToast } from '@/components/ui/use-toast'
 import { cn } from '@/lib/utils'
+import { getUniqueModelNamesFromChannels } from '@/lib/channel-models'
 import {
   Plus,
   RefreshCw,
@@ -30,6 +32,7 @@ export function Pricing() {
     Array<{ model: string; input: number; output: number; cache: number; request: number }>
   >([])
   const [searchQuery, setSearchQuery] = useState('')
+  const [modelOptions, setModelOptions] = useState<AutoCompleteOption[]>([])
 
   const { addToast } = useToast()
   const queryClient = useQueryClient()
@@ -41,6 +44,21 @@ export function Pricing() {
       return response.data as PricingConfig
     },
   })
+
+  useEffect(() => {
+    const loadChannelModels = async () => {
+      try {
+        const response = await apiClient.getChannels()
+        const channels = response.data as Channel[]
+        const modelNames = getUniqueModelNamesFromChannels(channels)
+        setModelOptions(modelNames.map((model) => ({ value: model })))
+      } catch (error) {
+        console.error('Failed to load channels for pricing suggestions:', error)
+      }
+    }
+
+    loadChannelModels()
+  }, [])
 
   useEffect(() => {
     if (data) {
@@ -152,6 +170,14 @@ export function Pricing() {
     .map((row, index) => ({ ...row, _i: index }))
     .filter((row) => row.model.toLowerCase().includes(searchQuery.toLowerCase()))
 
+  const pricingModelOptions = [
+    ...pricingRows
+      .map((row) => row.model.trim())
+      .filter((model) => model.length > 0)
+      .map((model) => ({ value: model })),
+    ...modelOptions,
+  ].filter((option, index, options) => options.findIndex((candidate) => candidate.value === option.value) === index)
+
   return (
     <PageContainer
       title="定价管理"
@@ -217,7 +243,7 @@ export function Pricing() {
             )}
 
             {/* Table */}
-            <div className="rounded-xl border bg-card overflow-hidden">
+            <div className="rounded-xl border bg-card">
               {/* Header */}
               <div className="grid gap-2 px-4 py-2.5 border-b bg-muted/30" style={{ gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr 40px' }}>
                 <span className="text-xs font-medium text-muted-foreground">模型名称</span>
@@ -232,11 +258,13 @@ export function Pricing() {
               <div className="divide-y">
                 {filteredRows.map((row) => (
                   <div key={row._i} className="grid gap-2 px-4 py-2 items-center hover:bg-muted/20 transition-colors" style={{ gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr 40px' }}>
-                    <Input
+                    <AutoCompleteInput
                       value={row.model}
-                      onChange={(e) => updateRow(row._i, 'model', e.target.value)}
+                      onChange={(value) => updateRow(row._i, 'model', value)}
                       placeholder="模型名称"
-                      className="font-mono text-sm h-8"
+                      inputClassName="font-mono text-sm h-8"
+                      options={pricingModelOptions}
+                      emptyText="没有匹配的模型"
                     />
                     <Input
                       type="number"
