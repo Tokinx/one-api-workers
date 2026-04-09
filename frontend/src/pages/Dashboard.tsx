@@ -84,8 +84,8 @@ export function Dashboard() {
         </div>
 
         {/* Decorative elements */}
-        <div className="absolute top-12 right-8 w-72 h-72 bg-primary/5 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute bottom-0 right-1/4 w-48 h-48 bg-violet-500/5 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute top-0 right-0 w-100 h-100 bg-teal-300/10 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute bottom-0 right-1/4 w-48 h-48 bg-blue-300/20 rounded-full blur-3xl pointer-events-none" />
       </div>
 
       <div className="px-4 md:px-6 lg:px-8 pb-8 space-y-10">

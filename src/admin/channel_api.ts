@@ -186,8 +186,8 @@ export class ChannelUpsertEndpoint extends OpenAPIRoute {
                             auto_rotate: z.boolean().optional().describe('Automatically rotate to other API keys on retryable failures'),
                             models: z.array(ChannelModelSchema).optional().describe('External model name to upstream model ID mappings'),
                             supported_models: z.array(z.string()).optional().describe('Deprecated supported request model list'),
-                            deployment_mapper: z.record(z.string()).optional().describe('Deprecated model deployment mapping'),
-                            model_pricing: z.record(z.object({
+                            deployment_mapper: z.record(z.string(), z.string()).optional().describe('Deprecated model deployment mapping'),
+                            model_pricing: z.record(z.string(), z.object({
                                 input: z.number().describe('Input token price per 1000 tokens'),
                                 output: z.number().describe('Output token price per 1000 tokens'),
                                 cache: z.number().optional().describe('Cache token price per 1000 tokens'),
@@ -257,8 +257,8 @@ export class ChannelFetchModelsEndpoint extends OpenAPIRoute {
                             auto_rotate: z.boolean().optional(),
                             models: z.array(ChannelModelSchema).optional(),
                             supported_models: z.array(z.string()).optional(),
-                            deployment_mapper: z.record(z.string()).optional(),
-                            model_pricing: z.record(z.object({
+                            deployment_mapper: z.record(z.string(), z.string()).optional(),
+                            model_pricing: z.record(z.string(), z.object({
                                 input: z.number(),
                                 output: z.number(),
                                 cache: z.number().optional(),

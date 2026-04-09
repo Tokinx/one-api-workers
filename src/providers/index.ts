@@ -24,9 +24,7 @@ class UnifiedProxyEndpoint extends OpenAPIRoute {
                 'Authorization': z.string().optional().describe("Token for authentication (OpenAI format)"),
                 'x-api-key': z.string().optional().describe("API key for authentication (Claude format)"),
             }),
-            body: contentJson({
-                schema: z.any(),
-            }),
+            body: contentJson(z.any()),
         },
         responses: {
             200: {

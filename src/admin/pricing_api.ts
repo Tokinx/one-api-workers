@@ -11,7 +11,7 @@ export class PricingGetEndpoint extends OpenAPIRoute {
         tags: ['Admin API'],
         summary: 'Get global pricing configuration',
         responses: {
-            ...CommonSuccessfulResponse(z.record(z.object({
+            ...CommonSuccessfulResponse(z.record(z.string(), z.object({
                 input: z.number(),
                 output: z.number(),
                 cache: z.number().optional(),
@@ -43,7 +43,7 @@ export class PricingUpdateEndpoint extends OpenAPIRoute {
             body: {
                 content: {
                     'application/json': {
-                        schema: z.record(z.object({
+                        schema: z.record(z.string(), z.object({
                             input: z.number(),
                             output: z.number(),
                             cache: z.number().optional(),

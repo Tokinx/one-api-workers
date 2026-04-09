@@ -5,7 +5,7 @@ import {
   Key,
   DollarSign,
   TestTube2,
-  Github,
+  GitBranch,
   Moon,
   Sun,
   LogOut,
@@ -179,7 +179,7 @@ export function Sidebar({
                 : "flex-1 h-8 gap-1.5 px-2.5 hover:bg-muted/70 text-muted-foreground hover:text-foreground text-[11px] font-medium",
             )}
           >
-            <Github className="h-3.5 w-3.5" />
+            <GitBranch className="h-3.5 w-3.5" />
             {!collapsed && <span>GitHub</span>}
           </a>
 
