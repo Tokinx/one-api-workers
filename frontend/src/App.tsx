@@ -78,10 +78,26 @@ function App() {
               }
             />
             <Route
+              path="/channels/new"
+              element={
+                <ProtectedRoute>
+                  <Channels createMode />
+                </ProtectedRoute>
+              }
+            />
+            <Route
               path="/tokens"
               element={
                 <ProtectedRoute>
                   <Tokens />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/tokens/new"
+              element={
+                <ProtectedRoute>
+                  <Tokens createMode />
                 </ProtectedRoute>
               }
             />

@@ -80,7 +80,7 @@ export function Sidebar({
   };
 
   const NavLink = ({ item }: { item: NavItem }) => {
-    const isActive = location.pathname === item.href;
+    const isActive = location.pathname === item.href || location.pathname.startsWith(`${item.href}/`);
     return (
       <Link
         to={item.href}

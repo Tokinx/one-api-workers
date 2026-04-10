@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useNavigate } from 'react-router-dom'
 import { apiClient } from '@/api/client'
 import { Token, TokenConfig, Channel } from '@/types'
 import { Card, CardContent } from '@/components/ui/card'
@@ -32,8 +33,9 @@ import { PageContainer } from '@/components/ui/page-container'
 
 type EditMode = 'form' | 'json'
 
-export function Tokens() {
-  const [view, setView] = useState<'list' | 'form'>('list')
+export function Tokens({ createMode = false }: { createMode?: boolean }) {
+  const navigate = useNavigate()
+  const [view, setView] = useState<'list' | 'form'>(createMode ? 'form' : 'list')
   const [editMode, setEditMode] = useState<EditMode>('form')
   const [editingKey, setEditingKey] = useState<string | null>(null)
   const [formData, setFormData] = useState<TokenConfig>({
@@ -41,7 +43,7 @@ export function Tokens() {
     channel_keys: [],
     total_quota: 0,
   })
-  const [tokenKey, setTokenKey] = useState('')
+  const [tokenKey, setTokenKey] = useState(() => (createMode ? generateTokenKey() : ''))
   const [jsonValue, setJsonValue] = useState('')
   const [availableChannels, setAvailableChannels] = useState<string[]>([])
   const [selectedChannels, setSelectedChannels] = useState<string[]>([])
@@ -86,8 +88,7 @@ export function Tokens() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tokens'] })
       addToast(editingKey ? '令牌更新成功' : '令牌添加成功', 'success')
-      resetForm()
-      setView('list')
+      closeForm()
     },
     onError: (error: any) => {
       addToast('保存失败：' + error.message, 'error')
@@ -120,19 +121,38 @@ export function Tokens() {
     },
   })
 
-  const resetForm = () => {
+  const resetForm = useCallback(() => {
     setFormData({ name: '', channel_keys: [], total_quota: 0 })
     setTokenKey('')
     setJsonValue('')
     setSelectedChannels([])
     setEditingKey(null)
     setEditMode('form')
+  }, [])
+
+  useEffect(() => {
+    if (createMode) {
+      resetForm()
+      setTokenKey(generateTokenKey())
+      setView('form')
+      return
+    }
+
+    setView('list')
+  }, [createMode, resetForm])
+
+  const closeForm = () => {
+    resetForm()
+    setView('list')
+
+    if (createMode) {
+      navigate('/tokens', { replace: true })
+    }
   }
 
   const handleAdd = () => {
     resetForm()
-    setTokenKey(generateTokenKey())
-    setView('form')
+    navigate('/tokens/new')
   }
 
   const handleEdit = (token: Token) => {
@@ -448,7 +468,7 @@ export function Tokens() {
       <div className="max-w-2xl mx-auto">
         {/* Header */}
         <div className="mb-6">
-          <Button variant="ghost" size="sm" className="mb-3 -ml-2 text-muted-foreground" onClick={() => setView('list')}>
+          <Button variant="ghost" size="sm" className="mb-3 -ml-2 text-muted-foreground" onClick={closeForm}>
             <ArrowLeft className="h-4 w-4 mr-1" />
             返回列表
           </Button>
@@ -597,7 +617,7 @@ export function Tokens() {
 
         {/* Actions */}
         <div className="flex items-center justify-end gap-3 pt-2">
-          <Button variant="outline" onClick={() => setView('list')}>
+          <Button variant="outline" onClick={closeForm}>
             取消
           </Button>
           <Button onClick={handleSave} disabled={saveMutation.isPending}>

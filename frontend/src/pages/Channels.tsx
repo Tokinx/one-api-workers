@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useNavigate } from 'react-router-dom'
 import { apiClient } from '@/api/client'
 import { Channel, ChannelConfig, ChannelModelMapping } from '@/types'
 import { Card, CardContent } from '@/components/ui/card'
@@ -365,8 +366,9 @@ const getChannelEndpointPreview = (type: string | undefined, endpoint: string): 
   return buildFallbackEndpointPreview(trimmedEndpoint, requestPath)
 }
 
-export function Channels() {
-  const [view, setView] = useState<'list' | 'form'>('list')
+export function Channels({ createMode = false }: { createMode?: boolean }) {
+  const navigate = useNavigate()
+  const [view, setView] = useState<'list' | 'form'>(createMode ? 'form' : 'list')
   const [editMode, setEditMode] = useState<EditMode>('form')
   const [modelEditorMode, setModelEditorMode] = useState<ModelEditorMode>('visual')
   const [editingKey, setEditingKey] = useState<string | null>(null)
@@ -426,8 +428,7 @@ export function Channels() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['channels'] })
       addToast(editingKey ? '渠道更新成功' : '渠道添加成功', 'success')
-      resetForm()
-      setView('list')
+      closeForm()
     },
     onError: (error: Error) => {
       addToast('保存失败：' + error.message, 'error')
@@ -464,7 +465,7 @@ export function Channels() {
     },
   })
 
-  const resetForm = () => {
+  const resetForm = useCallback(() => {
     setFormData(createDefaultChannelFormData())
     setChannelKey('')
     setJsonValue('')
@@ -474,11 +475,30 @@ export function Channels() {
     setModelEditorMode('visual')
     setEditingKey(null)
     setEditMode('form')
+  }, [])
+
+  useEffect(() => {
+    if (createMode) {
+      resetForm()
+      setView('form')
+      return
+    }
+
+    setView('list')
+  }, [createMode, resetForm])
+
+  const closeForm = () => {
+    resetForm()
+    setView('list')
+
+    if (createMode) {
+      navigate('/channels', { replace: true })
+    }
   }
 
   const handleAdd = () => {
     resetForm()
-    setView('form')
+    navigate('/channels/new')
   }
 
   const handleEdit = (channel: Channel) => {
@@ -827,7 +847,7 @@ export function Channels() {
     <div className="p-4 md:p-6 lg:p-8 animate-in">
       <div className="max-w-4xl mx-auto">
         <div className="mb-6">
-          <Button variant="ghost" size="sm" className="mb-3 -ml-2 text-muted-foreground" onClick={() => setView('list')}>
+          <Button variant="ghost" size="sm" className="mb-3 -ml-2 text-muted-foreground" onClick={closeForm}>
             <ArrowLeft className="h-4 w-4 mr-1" />
             返回列表
           </Button>
@@ -1051,7 +1071,7 @@ export function Channels() {
           )}
 
           <div className="flex items-center justify-end gap-3 pt-2">
-            <Button variant="outline" onClick={() => setView('list')}>
+            <Button variant="outline" onClick={closeForm}>
               取消
             </Button>
             <Button onClick={handleSave} disabled={saveMutation.isPending}>
