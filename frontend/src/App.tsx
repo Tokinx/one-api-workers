@@ -86,6 +86,14 @@ function App() {
               }
             />
             <Route
+              path="/channels/edit/:key"
+              element={
+                <ProtectedRoute>
+                  <Channels editRoute />
+                </ProtectedRoute>
+              }
+            />
+            <Route
               path="/tokens"
               element={
                 <ProtectedRoute>
@@ -98,6 +106,14 @@ function App() {
               element={
                 <ProtectedRoute>
                   <Tokens createMode />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/tokens/edit/:key"
+              element={
+                <ProtectedRoute>
+                  <Tokens editRoute />
                 </ProtectedRoute>
               }
             />

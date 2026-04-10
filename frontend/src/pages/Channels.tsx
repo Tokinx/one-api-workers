@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { apiClient } from '@/api/client'
 import { Channel, ChannelConfig, ChannelModelMapping } from '@/types'
 import { Card, CardContent } from '@/components/ui/card'
@@ -366,9 +366,17 @@ const getChannelEndpointPreview = (type: string | undefined, endpoint: string): 
   return buildFallbackEndpointPreview(trimmedEndpoint, requestPath)
 }
 
-export function Channels({ createMode = false }: { createMode?: boolean }) {
+export function Channels({
+  createMode = false,
+  editRoute = false,
+}: {
+  createMode?: boolean
+  editRoute?: boolean
+}) {
   const navigate = useNavigate()
-  const [view, setView] = useState<'list' | 'form'>(createMode ? 'form' : 'list')
+  const { key: routeKey } = useParams<{ key: string }>()
+  const isRouteEdit = editRoute && Boolean(routeKey)
+  const [view, setView] = useState<'list' | 'form'>((createMode || isRouteEdit) ? 'form' : 'list')
   const [editMode, setEditMode] = useState<EditMode>('form')
   const [modelEditorMode, setModelEditorMode] = useState<ModelEditorMode>('visual')
   const [editingKey, setEditingKey] = useState<string | null>(null)
@@ -406,6 +414,15 @@ export function Channels({ createMode = false }: { createMode?: boolean }) {
     setModelEditorMode('visual')
     return normalizedConfig
   }
+
+  const openChannelForEdit = useCallback((channel: Channel) => {
+    setEditingKey(channel.key)
+    setChannelKey(channel.key)
+    const rawConfig = typeof channel.value === 'string' ? JSON.parse(channel.value) : channel.value
+    const normalizedConfig = loadFormConfig(rawConfig)
+    setJsonValue(JSON.stringify(normalizedConfig, null, 2))
+    setView('form')
+  }, [])
 
   const { data, isLoading, isFetching, refetch } = useQuery({
     queryKey: ['channels'],
@@ -484,14 +501,34 @@ export function Channels({ createMode = false }: { createMode?: boolean }) {
       return
     }
 
+    if (isRouteEdit) {
+      if (isLoading) {
+        setView('form')
+        return
+      }
+
+      const targetChannel = data?.find((channel) => channel.key === routeKey)
+      if (!targetChannel) {
+        resetForm()
+        setView('list')
+        addToast('未找到对应渠道', 'error')
+        navigate('/channels', { replace: true })
+        return
+      }
+
+      openChannelForEdit(targetChannel)
+      return
+    }
+
+    resetForm()
     setView('list')
-  }, [createMode, resetForm])
+  }, [addToast, createMode, data, isLoading, isRouteEdit, navigate, openChannelForEdit, resetForm, routeKey])
 
   const closeForm = () => {
     resetForm()
     setView('list')
 
-    if (createMode) {
+    if (createMode || isRouteEdit) {
       navigate('/channels', { replace: true })
     }
   }
@@ -502,12 +539,7 @@ export function Channels({ createMode = false }: { createMode?: boolean }) {
   }
 
   const handleEdit = (channel: Channel) => {
-    setEditingKey(channel.key)
-    setChannelKey(channel.key)
-    const rawConfig = typeof channel.value === 'string' ? JSON.parse(channel.value) : channel.value
-    const normalizedConfig = loadFormConfig(rawConfig)
-    setJsonValue(JSON.stringify(normalizedConfig, null, 2))
-    setView('form')
+    navigate(`/channels/edit/${encodeURIComponent(channel.key)}`)
   }
 
   const handleDelete = (key: string) => {
@@ -840,6 +872,19 @@ export function Channels({ createMode = false }: { createMode?: boolean }) {
           </Card>
         )}
       </PageContainer>
+    )
+  }
+
+  if (isRouteEdit && isLoading && !editingKey) {
+    return (
+      <div className="p-4 md:p-6 lg:p-8 animate-in">
+        <div className="max-w-4xl mx-auto flex items-center justify-center py-20">
+          <div className="flex flex-col items-center gap-3">
+            <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+            <span className="text-sm text-muted-foreground">加载渠道中...</span>
+          </div>
+        </div>
+      </div>
     )
   }
 

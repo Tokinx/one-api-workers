@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { apiClient } from '@/api/client'
 import { Token, TokenConfig, Channel } from '@/types'
 import { Card, CardContent } from '@/components/ui/card'
@@ -33,9 +33,17 @@ import { PageContainer } from '@/components/ui/page-container'
 
 type EditMode = 'form' | 'json'
 
-export function Tokens({ createMode = false }: { createMode?: boolean }) {
+export function Tokens({
+  createMode = false,
+  editRoute = false,
+}: {
+  createMode?: boolean
+  editRoute?: boolean
+}) {
   const navigate = useNavigate()
-  const [view, setView] = useState<'list' | 'form'>(createMode ? 'form' : 'list')
+  const { key: routeKey } = useParams<{ key: string }>()
+  const isRouteEdit = editRoute && Boolean(routeKey)
+  const [view, setView] = useState<'list' | 'form'>((createMode || isRouteEdit) ? 'form' : 'list')
   const [editMode, setEditMode] = useState<EditMode>('form')
   const [editingKey, setEditingKey] = useState<string | null>(null)
   const [formData, setFormData] = useState<TokenConfig>({
@@ -72,6 +80,16 @@ export function Tokens({ createMode = false }: { createMode?: boolean }) {
       }
     }
     loadChannels()
+  }, [])
+
+  const openTokenForEdit = useCallback((token: Token) => {
+    setEditingKey(token.key)
+    setTokenKey(token.key)
+    const config = typeof token.value === 'string' ? JSON.parse(token.value) : token.value
+    setFormData(config)
+    setJsonValue(JSON.stringify(config, null, 2))
+    setSelectedChannels(config.channel_keys || [])
+    setView('form')
   }, [])
 
   // Close menu when clicking outside
@@ -138,14 +156,34 @@ export function Tokens({ createMode = false }: { createMode?: boolean }) {
       return
     }
 
+    if (isRouteEdit) {
+      if (isLoading) {
+        setView('form')
+        return
+      }
+
+      const targetToken = data?.find((token) => token.key === routeKey)
+      if (!targetToken) {
+        resetForm()
+        setView('list')
+        addToast('未找到对应令牌', 'error')
+        navigate('/tokens', { replace: true })
+        return
+      }
+
+      openTokenForEdit(targetToken)
+      return
+    }
+
+    resetForm()
     setView('list')
-  }, [createMode, resetForm])
+  }, [addToast, createMode, data, isLoading, isRouteEdit, navigate, openTokenForEdit, resetForm, routeKey])
 
   const closeForm = () => {
     resetForm()
     setView('list')
 
-    if (createMode) {
+    if (createMode || isRouteEdit) {
       navigate('/tokens', { replace: true })
     }
   }
@@ -156,13 +194,7 @@ export function Tokens({ createMode = false }: { createMode?: boolean }) {
   }
 
   const handleEdit = (token: Token) => {
-    setEditingKey(token.key)
-    setTokenKey(token.key)
-    const config = typeof token.value === 'string' ? JSON.parse(token.value) : token.value
-    setFormData(config)
-    setJsonValue(JSON.stringify(config, null, 2))
-    setSelectedChannels(config.channel_keys || [])
-    setView('form')
+    navigate(`/tokens/edit/${encodeURIComponent(token.key)}`)
   }
 
   const handleDelete = (key: string) => {
@@ -459,6 +491,19 @@ export function Tokens({ createMode = false }: { createMode?: boolean }) {
           </Card>
         )}
       </PageContainer>
+    )
+  }
+
+  if (isRouteEdit && isLoading && !editingKey) {
+    return (
+      <div className="p-4 md:p-6 lg:p-8 animate-in">
+        <div className="max-w-2xl mx-auto flex items-center justify-center py-20">
+          <div className="flex flex-col items-center gap-3">
+            <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+            <span className="text-sm text-muted-foreground">加载令牌中...</span>
+          </div>
+        </div>
+      </div>
     )
   }
 
