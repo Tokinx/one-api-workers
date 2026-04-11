@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { readScopedCache, writeScopedCache } from "@/lib/local-cache";
-import { cn, formatCurrency } from "@/lib/utils";
+import { cn, formatCurrency, parseUtcTimestamp } from "@/lib/utils";
 import { Eye, RefreshCw, RotateCcw, Search } from "lucide-react";
 
 type UsageLogFilterState = {
@@ -89,8 +89,8 @@ const hydrateUsageLogFilters = (
 };
 
 const formatDateTime = (value: string): string => {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
+  const date = parseUtcTimestamp(value);
+  if (!date) {
     return value;
   }
 

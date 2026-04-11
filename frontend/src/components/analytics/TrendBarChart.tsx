@@ -1,10 +1,10 @@
 import { AnalyticsRange, AnalyticsTrendPoint } from "@/types";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, parseUtcTimestamp } from "@/lib/utils";
 import { Card } from "../ui/card";
 
 const formatAxisLabel = (value: string, range: AnalyticsRange): string => {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
+  const date = parseUtcTimestamp(value);
+  if (!date) {
     return value;
   }
 

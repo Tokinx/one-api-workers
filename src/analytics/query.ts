@@ -235,6 +235,25 @@ const toText = (value: unknown): string => {
     return typeof value === "string" ? value : "";
 };
 
+const TIMESTAMP_TIMEZONE_PATTERN = /(Z|[+-]\d{2}:\d{2})$/i;
+
+const normalizeAnalyticsTimestamp = (value: unknown): string => {
+    const rawValue = toText(value).trim();
+    if (!rawValue) {
+        return "";
+    }
+
+    const normalizedValue = rawValue.includes("T")
+        ? rawValue
+        : rawValue.replace(" ", "T");
+    const candidate = TIMESTAMP_TIMEZONE_PATTERN.test(normalizedValue)
+        ? normalizedValue
+        : `${normalizedValue}Z`;
+    const date = new Date(candidate);
+
+    return Number.isNaN(date.getTime()) ? rawValue : date.toISOString();
+};
+
 const escapeSqlString = (value: string): string => {
     return value.replace(/'/g, "''");
 };
@@ -785,7 +804,7 @@ LIMIT ${limit}
         sampled: true,
         compatibilityWarning,
         items: rows.map((row) => ({
-            timestamp: toText(row.timestamp),
+            timestamp: normalizeAnalyticsTimestamp(row.timestamp),
             routeId: toText(row.route_id),
             tokenName: toText(row.token_name),
             channelKey: toText(row.channel_key),
@@ -970,7 +989,7 @@ OFFSET ${offset}
         hasPrevPage: totalPages > 0 && page > 1,
         hasNextPage: totalPages > 0 && page < totalPages,
         items: rows.map((row) => ({
-            timestamp: toText(row.timestamp),
+            timestamp: normalizeAnalyticsTimestamp(row.timestamp),
             routeId: toText(row.route_id),
             tokenName: toText(row.token_name),
             channelKey: toText(row.channel_key),
