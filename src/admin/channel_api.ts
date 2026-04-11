@@ -155,7 +155,11 @@ export class ChannelGetEndpoint extends OpenAPIRoute {
 
     async handle(c: Context<HonoCustomType>) {
         const result = await c.env.DB.prepare(
-            "SELECT * FROM channel_config"
+            `SELECT * FROM channel_config
+             ORDER BY
+             COALESCE(CAST(json_extract(value, '$.weight') AS INTEGER), 0) DESC,
+             datetime(created_at) DESC,
+             key ASC`
         ).all<ChannelConfigRow>();
 
         return {
@@ -182,6 +186,7 @@ export class ChannelUpsertEndpoint extends OpenAPIRoute {
                             type: z.string().describe('Channel type'),
                             endpoint: z.string().describe('API endpoint'),
                             enabled: z.boolean().optional().describe('Whether this channel participates in request routing'),
+                            weight: z.number().int().min(0).max(5).optional().describe('Priority weight for channel routing'),
                             api_key: z.string().optional().describe('Deprecated single API key'),
                             api_keys: z.array(z.string()).optional().describe('API keys, one request will pick one randomly'),
                             auto_retry: z.boolean().optional().describe('Automatically retry the same API key'),
@@ -254,6 +259,7 @@ export class ChannelFetchModelsEndpoint extends OpenAPIRoute {
                             type: z.string().optional(),
                             endpoint: z.string().optional(),
                             enabled: z.boolean().optional(),
+                            weight: z.number().int().min(0).max(5).optional(),
                             api_key: z.string().optional(),
                             api_keys: z.array(z.string()).optional(),
                             auto_retry: z.boolean().optional(),

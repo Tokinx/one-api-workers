@@ -71,6 +71,7 @@ type ChannelConfig = {
     type: ChannelType;
     endpoint: string;
     enabled?: boolean;
+    weight?: number;
     api_key?: string;
     api_keys?: string[];
     auto_retry?: boolean;

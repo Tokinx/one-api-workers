@@ -103,8 +103,14 @@ export const resolveChannel = async (
         return c.text(`Model not supported: ${requestedModel}. Please configure models.`, 400);
     }
 
-    const randomIndex = Math.floor(Math.random() * availableChannels.length);
-    const selectedChannel = availableChannels[randomIndex];
+    const maxWeight = availableChannels.reduce((highest, current) => {
+        return Math.max(highest, current.config.weight ?? 0);
+    }, 0);
+    const highestPriorityChannels = availableChannels.filter((channel) => {
+        return (channel.config.weight ?? 0) === maxWeight;
+    });
+    const randomIndex = Math.floor(Math.random() * highestPriorityChannels.length);
+    const selectedChannel = highestPriorityChannels[randomIndex];
     const targetChannelKey = selectedChannel.key;
     const targetChannelConfig = selectedChannel.config;
     const trackingState: RequestTrackingState = {

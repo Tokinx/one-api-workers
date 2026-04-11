@@ -1,18 +1,18 @@
-import { useCallback, useEffect, useState } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useNavigate, useParams } from 'react-router-dom'
-import { apiClient } from '@/api/client'
-import { Channel, ChannelConfig, ChannelModelMapping } from '@/types'
-import { Card, CardContent } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Select } from '@/components/ui/select'
-import { Textarea } from '@/components/ui/textarea'
-import { Checkbox } from '@/components/ui/checkbox'
-import { Switch } from '@/components/ui/switch'
-import { useToast } from '@/components/ui/use-toast'
-import { cn } from '@/lib/utils'
+import { useCallback, useEffect, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useNavigate, useParams } from "react-router-dom";
+import { apiClient } from "@/api/client";
+import { Channel, ChannelConfig, ChannelModelMapping } from "@/types";
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
+import { useToast } from "@/components/ui/use-toast";
+import { cn } from "@/lib/utils";
 import {
   Plus,
   RefreshCw,
@@ -27,700 +27,701 @@ import {
   Search,
   Globe,
   Cpu,
-} from 'lucide-react'
-import { PageContainer } from '@/components/ui/page-container'
+} from "lucide-react";
+import { PageContainer } from "@/components/ui/page-container";
 
-type EditMode = 'form' | 'json'
-type ModelEditorMode = 'visual' | 'json'
-type ModelRow = { id: string; name: string }
+type EditMode = "form" | "json";
+type ModelEditorMode = "visual" | "json";
+type ModelRow = { id: string; name: string };
 
 const channelTypes = [
-  { value: 'openai', label: 'OpenAI' },
-  { value: 'openai-responses', label: 'OpenAI Responses' },
-  { value: 'claude', label: 'Claude' },
-  { value: 'gemini', label: 'Gemini' },
-  { value: 'openai-audio', label: 'OpenAI Audio' },
-  { value: 'claude-to-openai', label: 'Claude → OpenAI' },
-  { value: 'azure-openai', label: 'Azure OpenAI' },
-  { value: 'azure-openai-audio', label: 'Azure OpenAI Audio' },
-  { value: 'azure-openai-responses', label: 'Azure OpenAI Responses' },
-]
+  { value: "openai", label: "OpenAI" },
+  { value: "openai-responses", label: "OpenAI Responses" },
+  { value: "claude", label: "Claude" },
+  { value: "gemini", label: "Gemini" },
+  { value: "openai-audio", label: "OpenAI Audio" },
+  { value: "claude-to-openai", label: "Claude → OpenAI" },
+  { value: "azure-openai", label: "Azure OpenAI" },
+  { value: "azure-openai-audio", label: "Azure OpenAI Audio" },
+  { value: "azure-openai-responses", label: "Azure OpenAI Responses" },
+];
+
+const channelWeightOptions = Array.from({ length: 6 }, (_, weight) => ({
+  value: String(weight),
+  label: `权重 ${weight}`,
+}));
 
 const createEmptyModelRow = (): ModelRow => ({
-  id: '',
-  name: '',
-})
+  id: "",
+  name: "",
+});
 
 const createDefaultChannelFormData = (): ChannelConfig => ({
-  name: '',
-  type: 'openai',
-  endpoint: '',
+  name: "",
+  type: "openai",
+  endpoint: "",
   enabled: true,
+  weight: 0,
   api_keys: [],
   auto_retry: true,
   auto_rotate: true,
   models: [],
-})
+});
+
+const normalizeChannelWeight = (weight: number | undefined): number => {
+  if (typeof weight !== "number" || !Number.isFinite(weight)) {
+    return 0;
+  }
+
+  return Math.min(5, Math.max(0, Math.trunc(weight)));
+};
 
 const parseApiKeys = (value: string): string[] => {
-  const seen = new Set<string>()
+  const seen = new Set<string>();
 
   return value
-    .split('\n')
+    .split("\n")
     .map((line) => line.trim())
     .filter((line) => line.length > 0)
     .filter((line) => {
       if (seen.has(line)) {
-        return false
+        return false;
       }
-      seen.add(line)
-      return true
-    })
-}
+      seen.add(line);
+      return true;
+    });
+};
 
 const formatApiKeys = (apiKeys?: string[]): string => {
-  return (apiKeys || []).join('\n')
-}
+  return (apiKeys || []).join("\n");
+};
 
 const normalizeModels = (models?: ChannelModelMapping[]): ChannelModelMapping[] => {
   if (!Array.isArray(models)) {
-    return []
+    return [];
   }
 
   return models
     .map((model) => ({
-      id: typeof model?.id === 'string' ? model.id.trim() : '',
-      name: typeof model?.name === 'string' ? model.name.trim() : '',
+      id: typeof model?.id === "string" ? model.id.trim() : "",
+      name: typeof model?.name === "string" ? model.name.trim() : "",
     }))
     .filter((model) => model.id.length > 0)
     .map((model) => ({
       id: model.id,
       name: model.name || model.id,
-    }))
-}
+    }));
+};
 
 const getChannelModels = (config: ChannelConfig): ChannelModelMapping[] => {
-  const normalizedModels = normalizeModels(config.models)
+  const normalizedModels = normalizeModels(config.models);
   if (normalizedModels.length > 0) {
-    return normalizedModels
+    return normalizedModels;
   }
 
-  const deploymentMapper = config.deployment_mapper || {}
-  const supportedModels = Array.isArray(config.supported_models) ? config.supported_models : []
-  const legacyModels: ChannelModelMapping[] = []
-  const seenNames = new Set<string>()
+  const deploymentMapper = config.deployment_mapper || {};
+  const supportedModels = Array.isArray(config.supported_models) ? config.supported_models : [];
+  const legacyModels: ChannelModelMapping[] = [];
+  const seenNames = new Set<string>();
 
   const pushModel = (id: string, name?: string) => {
-    const normalizedId = id.trim()
-    const normalizedName = (name || id).trim()
+    const normalizedId = id.trim();
+    const normalizedName = (name || id).trim();
 
     if (!normalizedId || !normalizedName || seenNames.has(normalizedName)) {
-      return
+      return;
     }
 
-    seenNames.add(normalizedName)
+    seenNames.add(normalizedName);
     legacyModels.push({
       id: normalizedId,
       name: normalizedName,
-    })
-  }
+    });
+  };
 
   supportedModels.forEach((modelName) => {
-    const normalizedName = typeof modelName === 'string' ? modelName.trim() : ''
+    const normalizedName = typeof modelName === "string" ? modelName.trim() : "";
     if (!normalizedName) {
-      return
+      return;
     }
-    pushModel(deploymentMapper[normalizedName] || normalizedName, normalizedName)
-  })
+    pushModel(deploymentMapper[normalizedName] || normalizedName, normalizedName);
+  });
 
   Object.entries(deploymentMapper).forEach(([modelName, modelId]) => {
-    if (typeof modelId !== 'string') {
-      return
+    if (typeof modelId !== "string") {
+      return;
     }
-    pushModel(modelId, modelName)
-  })
+    pushModel(modelId, modelName);
+  });
 
-  return legacyModels
-}
+  return legacyModels;
+};
 
 const normalizeChannelFormConfig = (config: ChannelConfig): ChannelConfig => {
-  const legacyApiKey = typeof config.api_key === 'string' ? config.api_key.trim() : ''
-  const rawApiKeys = Array.isArray(config.api_keys) ? config.api_keys : []
-  const mergedKeys = parseApiKeys([legacyApiKey, ...rawApiKeys].join('\n'))
-  const models = getChannelModels(config)
+  const legacyApiKey = typeof config.api_key === "string" ? config.api_key.trim() : "";
+  const rawApiKeys = Array.isArray(config.api_keys) ? config.api_keys : [];
+  const mergedKeys = parseApiKeys([legacyApiKey, ...rawApiKeys].join("\n"));
+  const models = getChannelModels(config);
 
   return {
     ...config,
     api_key: undefined,
     enabled: config.enabled ?? true,
+    weight: normalizeChannelWeight(config.weight),
     api_keys: mergedKeys,
     auto_retry: config.auto_retry ?? true,
     auto_rotate: config.auto_rotate ?? true,
     models,
     supported_models: undefined,
     deployment_mapper: undefined,
-  }
-}
+  };
+};
 
 const parseChannelValue = (channel: Channel): ChannelConfig => {
-  if (typeof channel.value !== 'string') {
-    return channel.value
+  if (typeof channel.value !== "string") {
+    return channel.value;
   }
 
   try {
-    return JSON.parse(channel.value) as ChannelConfig
+    return JSON.parse(channel.value) as ChannelConfig;
   } catch {
-    return createDefaultChannelFormData()
+    return createDefaultChannelFormData();
   }
-}
+};
 
-const buildChannelValue = (source: Channel['value'], config: ChannelConfig): Channel['value'] => {
-  return typeof source === 'string' ? JSON.stringify(config) : config
-}
+const buildChannelValue = (source: Channel["value"], config: ChannelConfig): Channel["value"] => {
+  return typeof source === "string" ? JSON.stringify(config) : config;
+};
 
 const isEmptyModelRow = (row: ModelRow): boolean => {
-  return !row.id.trim() && !row.name.trim()
-}
+  return !row.id.trim() && !row.name.trim();
+};
 
 const ensureTrailingEmptyModelRow = (rows: ModelRow[]): ModelRow[] => {
-  const meaningfulRows = rows.filter((row) => !isEmptyModelRow(row))
-  return [...meaningfulRows, createEmptyModelRow()]
-}
+  const meaningfulRows = rows.filter((row) => !isEmptyModelRow(row));
+  return [...meaningfulRows, createEmptyModelRow()];
+};
 
 const buildRowsFromModels = (models: ChannelModelMapping[]): ModelRow[] => {
-  return ensureTrailingEmptyModelRow(models.map((model) => ({ id: model.id, name: model.name })))
-}
+  return ensureTrailingEmptyModelRow(models.map((model) => ({ id: model.id, name: model.name })));
+};
 
 const serializeModels = (models: ChannelModelMapping[]): string => {
-  return JSON.stringify(models, null, 2)
-}
+  return JSON.stringify(models, null, 2);
+};
 
 const validateModels = (models: ChannelModelMapping[]): string | null => {
   if (models.length === 0) {
-    return '请至少配置一个模型'
+    return "请至少配置一个模型";
   }
 
-  const names = new Set<string>()
+  const names = new Set<string>();
   for (const model of models) {
     if (names.has(model.name)) {
-      return `模型名称重复：${model.name}`
+      return `模型名称重复：${model.name}`;
     }
-    names.add(model.name)
+    names.add(model.name);
   }
 
-  return null
-}
+  return null;
+};
 
 const parseModelsFromRows = (rows: ModelRow[]): { models: ChannelModelMapping[]; error?: string } => {
-  const activeRows = rows.filter((row) => !isEmptyModelRow(row))
+  const activeRows = rows.filter((row) => !isEmptyModelRow(row));
 
   for (const row of activeRows) {
     if (!row.id.trim()) {
-      return { models: [], error: '模型 ID 不能为空' }
+      return { models: [], error: "模型 ID 不能为空" };
     }
   }
 
   const models = activeRows.map((row) => {
-    const id = row.id.trim()
-    const name = row.name.trim() || id
-    return { id, name }
-  })
+    const id = row.id.trim();
+    const name = row.name.trim() || id;
+    return { id, name };
+  });
 
-  const validationError = validateModels(models)
+  const validationError = validateModels(models);
   if (validationError) {
-    return { models: [], error: validationError }
+    return { models: [], error: validationError };
   }
 
-  return { models }
-}
+  return { models };
+};
 
 const parseModelsFromJson = (value: string): { models: ChannelModelMapping[]; error?: string } => {
-  let parsed: unknown
+  let parsed: unknown;
 
   try {
-    parsed = JSON.parse(value)
+    parsed = JSON.parse(value);
   } catch {
-    return { models: [], error: '模型 JSON 格式错误' }
+    return { models: [], error: "模型 JSON 格式错误" };
   }
 
   if (!Array.isArray(parsed)) {
-    return { models: [], error: '模型 JSON 必须是数组' }
+    return { models: [], error: "模型 JSON 必须是数组" };
   }
 
-  const models: ChannelModelMapping[] = []
+  const models: ChannelModelMapping[] = [];
 
   for (const item of parsed) {
-    if (!item || typeof item !== 'object') {
-      return { models: [], error: '模型 JSON 项必须是对象' }
+    if (!item || typeof item !== "object") {
+      return { models: [], error: "模型 JSON 项必须是对象" };
     }
 
-    const id = typeof (item as ChannelModelMapping).id === 'string' ? (item as ChannelModelMapping).id.trim() : ''
-    const rawName = typeof (item as ChannelModelMapping).name === 'string' ? (item as ChannelModelMapping).name.trim() : ''
+    const id = typeof (item as ChannelModelMapping).id === "string" ? (item as ChannelModelMapping).id.trim() : "";
+    const rawName =
+      typeof (item as ChannelModelMapping).name === "string" ? (item as ChannelModelMapping).name.trim() : "";
 
     if (!id) {
-      return { models: [], error: '模型 JSON 中的 id 不能为空' }
+      return { models: [], error: "模型 JSON 中的 id 不能为空" };
     }
 
     models.push({
       id,
       name: rawName || id,
-    })
+    });
   }
 
-  const validationError = validateModels(models)
+  const validationError = validateModels(models);
   if (validationError) {
-    return { models: [], error: validationError }
+    return { models: [], error: validationError };
   }
 
-  return { models }
-}
+  return { models };
+};
 
-const trimSlashes = (value: string): string => value.replace(/^\/+|\/+$/g, '')
+const trimSlashes = (value: string): string => value.replace(/^\/+|\/+$/g, "");
 
 const joinPath = (...segments: string[]): string => {
-  const cleanedSegments = segments
-    .map((segment) => trimSlashes(segment))
-    .filter((segment) => segment.length > 0)
+  const cleanedSegments = segments.map((segment) => trimSlashes(segment)).filter((segment) => segment.length > 0);
 
-  return `/${cleanedSegments.join('/')}`
-}
+  return `/${cleanedSegments.join("/")}`;
+};
 
 const getChannelRequestPreviewPath = (type: string | undefined): string => {
   switch (type) {
-    case 'claude':
-      return '/v1/messages'
-    case 'openai-audio':
-    case 'azure-openai-audio':
-      return '/v1/audio/speech'
-    case 'openai-responses':
-    case 'azure-openai-responses':
-      return '/v1/responses'
-    case 'openai':
-    case 'azure-openai':
-    case 'claude-to-openai':
+    case "claude":
+      return "/v1/messages";
+    case "openai-audio":
+    case "azure-openai-audio":
+      return "/v1/audio/speech";
+    case "openai-responses":
+    case "azure-openai-responses":
+      return "/v1/responses";
+    case "openai":
+    case "azure-openai":
+    case "claude-to-openai":
     default:
-      return '/v1/chat/completions'
+      return "/v1/chat/completions";
   }
-}
+};
 
 const isGeminiChannelType = (type: string | undefined): boolean => {
-  return type === 'gemini'
-}
+  return type === "gemini";
+};
 
 const isOpenAIStyleChannelType = (type: string | undefined): boolean => {
-  return ['openai', 'openai-audio', 'openai-responses', 'claude-to-openai'].includes(type || '')
-}
+  return ["openai", "openai-audio", "openai-responses", "claude-to-openai"].includes(type || "");
+};
 
 const isAzureChannelType = (type: string | undefined): boolean => {
-  return ['azure-openai', 'azure-openai-audio', 'azure-openai-responses'].includes(type || '')
-}
+  return ["azure-openai", "azure-openai-audio", "azure-openai-responses"].includes(type || "");
+};
 
-const buildPrefixedEndpointPreview = (
-  endpoint: string,
-  requestPath: string,
-  prefixToStrip = '/v1'
-): string => {
-  const targetUrl = new URL(endpoint)
-  const currentBasePath = trimSlashes(targetUrl.pathname)
-  const normalizedPrefix = trimSlashes(prefixToStrip)
-  const baseAlreadyContainsPrefix =
-    normalizedPrefix.length > 0 && currentBasePath.endsWith(normalizedPrefix)
-  const explicitBasePath = endpoint.endsWith('/')
+const buildPrefixedEndpointPreview = (endpoint: string, requestPath: string, prefixToStrip = "/v1"): string => {
+  const targetUrl = new URL(endpoint);
+  const currentBasePath = trimSlashes(targetUrl.pathname);
+  const normalizedPrefix = trimSlashes(prefixToStrip);
+  const baseAlreadyContainsPrefix = normalizedPrefix.length > 0 && currentBasePath.endsWith(normalizedPrefix);
+  const explicitBasePath = endpoint.endsWith("/");
 
-  let normalizedRequestPath = requestPath
+  let normalizedRequestPath = requestPath;
   if ((baseAlreadyContainsPrefix || explicitBasePath) && normalizedRequestPath.startsWith(prefixToStrip)) {
-    normalizedRequestPath = normalizedRequestPath.slice(prefixToStrip.length)
+    normalizedRequestPath = normalizedRequestPath.slice(prefixToStrip.length);
   }
 
-  targetUrl.pathname = joinPath(currentBasePath, normalizedRequestPath)
-  return targetUrl.toString()
-}
+  targetUrl.pathname = joinPath(currentBasePath, normalizedRequestPath);
+  return targetUrl.toString();
+};
 
 const buildAzureEndpointPreview = (endpoint: string, requestPath: string): string => {
-  const targetUrl = new URL(endpoint)
-  const currentBasePath = trimSlashes(targetUrl.pathname)
-  const normalizedRequestPath = requestPath.replace(/^\/v1/, '')
-  const explicitBasePath = endpoint.endsWith('/')
-  const azureBasePath = currentBasePath.endsWith('openai/v1')
+  const targetUrl = new URL(endpoint);
+  const currentBasePath = trimSlashes(targetUrl.pathname);
+  const normalizedRequestPath = requestPath.replace(/^\/v1/, "");
+  const explicitBasePath = endpoint.endsWith("/");
+  const azureBasePath = currentBasePath.endsWith("openai/v1")
     ? currentBasePath
-    : currentBasePath.endsWith('openai')
+    : currentBasePath.endsWith("openai")
       ? explicitBasePath
         ? currentBasePath
-        : joinPath(currentBasePath, 'v1')
+        : joinPath(currentBasePath, "v1")
       : explicitBasePath
-        ? joinPath(currentBasePath, 'openai')
-        : joinPath(currentBasePath, 'openai/v1')
+        ? joinPath(currentBasePath, "openai")
+        : joinPath(currentBasePath, "openai/v1");
 
-  targetUrl.pathname = joinPath(azureBasePath, normalizedRequestPath)
-  return targetUrl.toString()
-}
+  targetUrl.pathname = joinPath(azureBasePath, normalizedRequestPath);
+  return targetUrl.toString();
+};
 
 const buildClaudeEndpointPreview = (endpoint: string, requestPath: string): string => {
-  return buildPrefixedEndpointPreview(endpoint, requestPath)
-}
+  return buildPrefixedEndpointPreview(endpoint, requestPath);
+};
 
 const buildGeminiEndpointPreview = (endpoint: string, requestPath: string): string => {
-  const targetUrl = new URL(endpoint)
-  const currentBasePath = trimSlashes(targetUrl.pathname)
-  const normalizedRequestPath = requestPath.replace(/^\/v1(?=\/|$)/, '')
-  const geminiBasePath = currentBasePath.endsWith('v1beta/openai')
+  const targetUrl = new URL(endpoint);
+  const currentBasePath = trimSlashes(targetUrl.pathname);
+  const normalizedRequestPath = requestPath.replace(/^\/v1(?=\/|$)/, "");
+  const geminiBasePath = currentBasePath.endsWith("v1beta/openai")
     ? currentBasePath
-    : currentBasePath.endsWith('v1beta')
-      ? joinPath(currentBasePath, 'openai')
-      : currentBasePath.endsWith('openai')
+    : currentBasePath.endsWith("v1beta")
+      ? joinPath(currentBasePath, "openai")
+      : currentBasePath.endsWith("openai")
         ? currentBasePath
-        : joinPath(currentBasePath, 'v1beta/openai')
+        : joinPath(currentBasePath, "v1beta/openai");
 
-  targetUrl.pathname = joinPath(geminiBasePath, normalizedRequestPath)
-  return targetUrl.toString()
-}
+  targetUrl.pathname = joinPath(geminiBasePath, normalizedRequestPath);
+  return targetUrl.toString();
+};
 
 const buildFallbackEndpointPreview = (endpoint: string, requestPath: string): string => {
-  const normalizedEndpoint = endpoint.trim().replace(/\/+$/, '')
-  return `${normalizedEndpoint}${requestPath}`
-}
+  const normalizedEndpoint = endpoint.trim().replace(/\/+$/, "");
+  return `${normalizedEndpoint}${requestPath}`;
+};
 
 const getChannelEndpointPlaceholder = (type: string | undefined): string => {
   switch (type) {
-    case 'gemini':
-      return 'https://generativelanguage.googleapis.com/v1beta/openai/'
-    case 'azure-openai':
-    case 'azure-openai-audio':
-    case 'azure-openai-responses':
-      return 'https://your-resource.openai.azure.com/'
-    case 'claude':
-      return 'https://api.anthropic.com/v1/'
+    case "gemini":
+      return "https://generativelanguage.googleapis.com/v1beta/openai/";
+    case "azure-openai":
+    case "azure-openai-audio":
+    case "azure-openai-responses":
+      return "https://your-resource.openai.azure.com/";
+    case "claude":
+      return "https://api.anthropic.com/v1/";
     default:
-      return 'https://api.openai.com/v1/'
+      return "https://api.openai.com/v1/";
   }
-}
+};
 
 const getChannelEndpointPreview = (type: string | undefined, endpoint: string): string => {
-  const trimmedEndpoint = endpoint.trim()
-  const requestPath = getChannelRequestPreviewPath(type)
+  const trimmedEndpoint = endpoint.trim();
+  const requestPath = getChannelRequestPreviewPath(type);
   if (!trimmedEndpoint) {
     return requestPath;
   }
 
   try {
-    if (type === 'claude') {
-      return buildClaudeEndpointPreview(trimmedEndpoint, requestPath)
+    if (type === "claude") {
+      return buildClaudeEndpointPreview(trimmedEndpoint, requestPath);
     }
 
     if (isGeminiChannelType(type)) {
-      return buildGeminiEndpointPreview(trimmedEndpoint, requestPath)
+      return buildGeminiEndpointPreview(trimmedEndpoint, requestPath);
     }
 
     if (isAzureChannelType(type)) {
-      return buildAzureEndpointPreview(trimmedEndpoint, requestPath)
+      return buildAzureEndpointPreview(trimmedEndpoint, requestPath);
     }
 
     if (isOpenAIStyleChannelType(type)) {
-      return buildPrefixedEndpointPreview(trimmedEndpoint, requestPath)
+      return buildPrefixedEndpointPreview(trimmedEndpoint, requestPath);
     }
   } catch {
-    return buildFallbackEndpointPreview(trimmedEndpoint, requestPath)
+    return buildFallbackEndpointPreview(trimmedEndpoint, requestPath);
   }
 
-  return buildFallbackEndpointPreview(trimmedEndpoint, requestPath)
-}
+  return buildFallbackEndpointPreview(trimmedEndpoint, requestPath);
+};
 
-export function Channels({
-  createMode = false,
-  editRoute = false,
-}: {
-  createMode?: boolean
-  editRoute?: boolean
-}) {
-  const navigate = useNavigate()
-  const { key: routeKey } = useParams<{ key: string }>()
-  const isRouteEdit = editRoute && Boolean(routeKey)
-  const [view, setView] = useState<'list' | 'form'>((createMode || isRouteEdit) ? 'form' : 'list')
-  const [editMode, setEditMode] = useState<EditMode>('form')
-  const [modelEditorMode, setModelEditorMode] = useState<ModelEditorMode>('visual')
-  const [editingKey, setEditingKey] = useState<string | null>(null)
-  const [formData, setFormData] = useState<ChannelConfig>(createDefaultChannelFormData())
-  const [channelKey, setChannelKey] = useState('')
-  const [jsonValue, setJsonValue] = useState('')
-  const [apiKeysInput, setApiKeysInput] = useState('')
-  const [modelRows, setModelRows] = useState<ModelRow[]>([createEmptyModelRow()])
-  const [modelJsonValue, setModelJsonValue] = useState('[]')
-  const [searchQuery, setSearchQuery] = useState('')
-  const [openMenu, setOpenMenu] = useState<string | null>(null)
+export function Channels({ createMode = false, editRoute = false }: { createMode?: boolean; editRoute?: boolean }) {
+  const navigate = useNavigate();
+  const { key: routeKey } = useParams<{ key: string }>();
+  const isRouteEdit = editRoute && Boolean(routeKey);
+  const [view, setView] = useState<"list" | "form">(createMode || isRouteEdit ? "form" : "list");
+  const [editMode, setEditMode] = useState<EditMode>("form");
+  const [modelEditorMode, setModelEditorMode] = useState<ModelEditorMode>("visual");
+  const [editingKey, setEditingKey] = useState<string | null>(null);
+  const [formData, setFormData] = useState<ChannelConfig>(createDefaultChannelFormData());
+  const [channelKey, setChannelKey] = useState("");
+  const [jsonValue, setJsonValue] = useState("");
+  const [apiKeysInput, setApiKeysInput] = useState("");
+  const [modelRows, setModelRows] = useState<ModelRow[]>([createEmptyModelRow()]);
+  const [modelJsonValue, setModelJsonValue] = useState("[]");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [openMenu, setOpenMenu] = useState<string | null>(null);
 
-  const { addToast } = useToast()
-  const queryClient = useQueryClient()
+  const { addToast } = useToast();
+  const queryClient = useQueryClient();
 
   const applyModels = (models: ChannelModelMapping[]) => {
-    const normalizedModels = normalizeModels(models)
-    setFormData((prev) => ({ ...prev, models: normalizedModels }))
-    setModelRows(buildRowsFromModels(normalizedModels))
-    setModelJsonValue(serializeModels(normalizedModels))
-  }
+    const normalizedModels = normalizeModels(models);
+    setFormData((prev) => ({ ...prev, models: normalizedModels }));
+    setModelRows(buildRowsFromModels(normalizedModels));
+    setModelJsonValue(serializeModels(normalizedModels));
+  };
 
   const resolveCurrentModels = (): { models: ChannelModelMapping[]; error?: string } => {
-    return modelEditorMode === 'visual'
-      ? parseModelsFromRows(modelRows)
-      : parseModelsFromJson(modelJsonValue)
-  }
+    return modelEditorMode === "visual" ? parseModelsFromRows(modelRows) : parseModelsFromJson(modelJsonValue);
+  };
 
   const loadFormConfig = (config: ChannelConfig) => {
-    const normalizedConfig = normalizeChannelFormConfig(config)
-    setFormData(normalizedConfig)
-    setApiKeysInput(formatApiKeys(normalizedConfig.api_keys))
-    setModelRows(buildRowsFromModels(normalizedConfig.models || []))
-    setModelJsonValue(serializeModels(normalizedConfig.models || []))
-    setModelEditorMode('visual')
-    return normalizedConfig
-  }
+    const normalizedConfig = normalizeChannelFormConfig(config);
+    setFormData(normalizedConfig);
+    setApiKeysInput(formatApiKeys(normalizedConfig.api_keys));
+    setModelRows(buildRowsFromModels(normalizedConfig.models || []));
+    setModelJsonValue(serializeModels(normalizedConfig.models || []));
+    setModelEditorMode("visual");
+    return normalizedConfig;
+  };
 
   const openChannelForEdit = useCallback((channel: Channel) => {
-    setEditingKey(channel.key)
-    setChannelKey(channel.key)
-    const rawConfig = parseChannelValue(channel)
-    const normalizedConfig = loadFormConfig(rawConfig)
-    setJsonValue(JSON.stringify(normalizedConfig, null, 2))
-    setView('form')
-  }, [])
+    setEditingKey(channel.key);
+    setChannelKey(channel.key);
+    const rawConfig = parseChannelValue(channel);
+    const normalizedConfig = loadFormConfig(rawConfig);
+    setJsonValue(JSON.stringify(normalizedConfig, null, 2));
+    setView("form");
+  }, []);
 
   const { data, isLoading, isFetching, refetch } = useQuery({
-    queryKey: ['channels'],
+    queryKey: ["channels"],
     queryFn: async () => {
-      const response = await apiClient.getChannels()
-      return response.data as Channel[]
+      const response = await apiClient.getChannels();
+      return response.data as Channel[];
     },
-  })
+  });
 
   useEffect(() => {
-    const handleClick = () => setOpenMenu(null)
-    document.addEventListener('click', handleClick)
-    return () => document.removeEventListener('click', handleClick)
-  }, [])
+    const handleClick = () => setOpenMenu(null);
+    document.addEventListener("click", handleClick);
+    return () => document.removeEventListener("click", handleClick);
+  }, []);
 
   const saveMutation = useMutation({
     mutationFn: async ({ key, config }: { key: string; config: ChannelConfig }) => {
-      return apiClient.saveChannel(key, config)
+      return apiClient.saveChannel(key, config);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['channels'] })
-      addToast(editingKey ? '渠道更新成功' : '渠道添加成功', 'success')
-      closeForm()
+      queryClient.invalidateQueries({ queryKey: ["channels"] });
+      addToast(editingKey ? "渠道更新成功" : "渠道添加成功", "success");
+      closeForm();
     },
     onError: (error: Error) => {
-      addToast('保存失败：' + error.message, 'error')
+      addToast("保存失败：" + error.message, "error");
     },
-  })
+  });
 
   const deleteMutation = useMutation({
     mutationFn: async (key: string) => {
-      return apiClient.deleteChannel(key)
+      return apiClient.deleteChannel(key);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['channels'] })
-      addToast('渠道已删除', 'success')
+      queryClient.invalidateQueries({ queryKey: ["channels"] });
+      addToast("渠道已删除", "success");
     },
     onError: (error: Error) => {
-      addToast('删除失败：' + error.message, 'error')
+      addToast("删除失败：" + error.message, "error");
     },
-  })
+  });
 
   const toggleEnabledMutation = useMutation({
     mutationFn: async ({ channel, enabled }: { channel: Channel; enabled: boolean }) => {
-      const config = normalizeChannelFormConfig(parseChannelValue(channel))
-      return apiClient.saveChannel(channel.key, { ...config, enabled })
+      const config = normalizeChannelFormConfig(parseChannelValue(channel));
+      return apiClient.saveChannel(channel.key, { ...config, enabled });
     },
     onMutate: async ({ channel, enabled }) => {
-      await queryClient.cancelQueries({ queryKey: ['channels'] })
-      const previousChannels = queryClient.getQueryData<Channel[]>(['channels'])
+      await queryClient.cancelQueries({ queryKey: ["channels"] });
+      const previousChannels = queryClient.getQueryData<Channel[]>(["channels"]);
 
-      queryClient.setQueryData<Channel[]>(['channels'], (current) => {
+      queryClient.setQueryData<Channel[]>(["channels"], (current) => {
         if (!current) {
-          return current
+          return current;
         }
 
         return current.map((item) => {
           if (item.key !== channel.key) {
-            return item
+            return item;
           }
 
-          const config = normalizeChannelFormConfig(parseChannelValue(item))
+          const config = normalizeChannelFormConfig(parseChannelValue(item));
           return {
             ...item,
             value: buildChannelValue(item.value, { ...config, enabled }),
-          }
-        })
-      })
+          };
+        });
+      });
 
-      return { previousChannels }
+      return { previousChannels };
     },
     onSuccess: (_, { enabled }) => {
-      addToast(enabled ? '渠道已启用' : '渠道已停用', 'success')
+      addToast(enabled ? "渠道已启用" : "渠道已停用", "success");
     },
     onError: (error: Error, _variables, context) => {
       if (context?.previousChannels) {
-        queryClient.setQueryData(['channels'], context.previousChannels)
+        queryClient.setQueryData(["channels"], context.previousChannels);
       }
-      addToast('更新渠道状态失败：' + error.message, 'error')
+      addToast("更新渠道状态失败：" + error.message, "error");
     },
     onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ['channels'] })
+      queryClient.invalidateQueries({ queryKey: ["channels"] });
     },
-  })
+  });
 
   const fetchModelsMutation = useMutation({
     mutationFn: async (config: ChannelConfig) => {
-      return apiClient.fetchChannelModels(config)
+      return apiClient.fetchChannelModels(config);
     },
     onSuccess: (response) => {
       const fetchedModels = ((response.data as ChannelModelMapping[]) || []).map((model) => ({
         id: model.id,
         name: model.id,
-      }))
-      applyModels(fetchedModels)
-      addToast(`已获取 ${fetchedModels.length} 个模型`, 'success')
+      }));
+      applyModels(fetchedModels);
+      addToast(`已获取 ${fetchedModels.length} 个模型`, "success");
     },
     onError: (error: Error) => {
-      addToast('获取模型失败：' + error.message, 'error')
+      addToast("获取模型失败：" + error.message, "error");
     },
-  })
+  });
 
   const resetForm = useCallback(() => {
-    setFormData(createDefaultChannelFormData())
-    setChannelKey('')
-    setJsonValue('')
-    setApiKeysInput('')
-    setModelRows([createEmptyModelRow()])
-    setModelJsonValue('[]')
-    setModelEditorMode('visual')
-    setEditingKey(null)
-    setEditMode('form')
-  }, [])
+    setFormData(createDefaultChannelFormData());
+    setChannelKey("");
+    setJsonValue("");
+    setApiKeysInput("");
+    setModelRows([createEmptyModelRow()]);
+    setModelJsonValue("[]");
+    setModelEditorMode("visual");
+    setEditingKey(null);
+    setEditMode("form");
+  }, []);
 
   useEffect(() => {
     if (createMode) {
-      resetForm()
-      setView('form')
-      return
+      resetForm();
+      setView("form");
+      return;
     }
 
     if (isRouteEdit) {
       if (isLoading) {
-        setView('form')
-        return
+        setView("form");
+        return;
       }
 
-      const targetChannel = data?.find((channel) => channel.key === routeKey)
+      const targetChannel = data?.find((channel) => channel.key === routeKey);
       if (!targetChannel) {
-        resetForm()
-        setView('list')
-        addToast('未找到对应渠道', 'error')
-        navigate('/channels', { replace: true })
-        return
+        resetForm();
+        setView("list");
+        addToast("未找到对应渠道", "error");
+        navigate("/channels", { replace: true });
+        return;
       }
 
-      openChannelForEdit(targetChannel)
-      return
+      openChannelForEdit(targetChannel);
+      return;
     }
 
-    resetForm()
-    setView('list')
-  }, [addToast, createMode, data, isLoading, isRouteEdit, navigate, openChannelForEdit, resetForm, routeKey])
+    resetForm();
+    setView("list");
+  }, [addToast, createMode, data, isLoading, isRouteEdit, navigate, openChannelForEdit, resetForm, routeKey]);
 
   const closeForm = () => {
-    resetForm()
-    setView('list')
+    resetForm();
+    setView("list");
 
     if (createMode || isRouteEdit) {
-      navigate('/channels', { replace: true })
+      navigate("/channels", { replace: true });
     }
-  }
+  };
 
   const handleAdd = () => {
-    resetForm()
-    navigate('/channels/new')
-  }
+    resetForm();
+    navigate("/channels/new");
+  };
 
   const handleEdit = (channel: Channel) => {
-    navigate(`/channels/edit/${encodeURIComponent(channel.key)}`)
-  }
+    navigate(`/channels/edit/${encodeURIComponent(channel.key)}`);
+  };
 
   const handleDelete = (key: string) => {
-    if (confirm('确定要删除此渠道吗？')) {
-      deleteMutation.mutate(key)
+    if (confirm("确定要删除此渠道吗？")) {
+      deleteMutation.mutate(key);
     }
-  }
+  };
 
   const handleToggleEnabled = (channel: Channel, enabled: boolean) => {
-    toggleEnabledMutation.mutate({ channel, enabled })
-  }
+    toggleEnabledMutation.mutate({ channel, enabled });
+  };
 
   const handleFetchModels = () => {
-    const apiKeys = parseApiKeys(apiKeysInput)
+    const apiKeys = parseApiKeys(apiKeysInput);
 
     if (!formData.type || !formData.endpoint || apiKeys.length === 0) {
-      addToast('请先填写渠道类型、API 端点和 API 密钥', 'error')
-      return
+      addToast("请先填写渠道类型、API 端点和 API 密钥", "error");
+      return;
     }
 
     const config = normalizeChannelFormConfig({
       ...formData,
       api_keys: apiKeys,
-    })
+    });
 
-    fetchModelsMutation.mutate(config)
-  }
+    fetchModelsMutation.mutate(config);
+  };
 
   const handleSave = () => {
     if (!channelKey) {
-      addToast('请填写渠道标识', 'error')
-      return
+      addToast("请填写渠道标识", "error");
+      return;
     }
 
-    const apiKeys = parseApiKeys(apiKeysInput)
-    const modelResult = resolveCurrentModels()
+    const apiKeys = parseApiKeys(apiKeysInput);
+    const modelResult = resolveCurrentModels();
 
     if (modelResult.error) {
-      addToast(modelResult.error, 'error')
-      return
+      addToast(modelResult.error, "error");
+      return;
     }
 
     if (!formData.name || !formData.endpoint || apiKeys.length === 0) {
-      addToast('请填写所有必填字段', 'error')
-      return
+      addToast("请填写所有必填字段", "error");
+      return;
     }
 
-    let config: ChannelConfig
-    if (editMode === 'form') {
+    let config: ChannelConfig;
+    if (editMode === "form") {
       config = normalizeChannelFormConfig({
         ...formData,
         api_key: undefined,
         api_keys: apiKeys,
         models: modelResult.models,
-      })
+      });
     } else {
       try {
-        config = normalizeChannelFormConfig(JSON.parse(jsonValue))
+        config = normalizeChannelFormConfig(JSON.parse(jsonValue));
       } catch {
-        addToast('JSON 格式错误', 'error')
-        return
+        addToast("JSON 格式错误", "error");
+        return;
       }
 
-      const validationError = validateModels(config.models || [])
+      const validationError = validateModels(config.models || []);
       if (validationError) {
-        addToast(validationError, 'error')
-        return
+        addToast(validationError, "error");
+        return;
       }
     }
 
-    saveMutation.mutate({ key: channelKey, config })
-  }
+    saveMutation.mutate({ key: channelKey, config });
+  };
 
   const toggleEditMode = () => {
-    if (editMode === 'form') {
-      const modelResult = resolveCurrentModels()
+    if (editMode === "form") {
+      const modelResult = resolveCurrentModels();
       if (modelResult.error) {
-        addToast(modelResult.error, 'error')
-        return
+        addToast(modelResult.error, "error");
+        return;
       }
 
       const config = normalizeChannelFormConfig({
@@ -728,112 +729,112 @@ export function Channels({
         api_key: undefined,
         api_keys: parseApiKeys(apiKeysInput),
         models: modelResult.models,
-      })
-      setJsonValue(JSON.stringify(config, null, 2))
-      setEditMode('json')
-      return
+      });
+      setJsonValue(JSON.stringify(config, null, 2));
+      setEditMode("json");
+      return;
     }
 
     try {
-      const config = normalizeChannelFormConfig(JSON.parse(jsonValue))
-      const validationError = validateModels(config.models || [])
+      const config = normalizeChannelFormConfig(JSON.parse(jsonValue));
+      const validationError = validateModels(config.models || []);
       if (validationError) {
-        addToast(validationError, 'error')
-        return
+        addToast(validationError, "error");
+        return;
       }
 
-      loadFormConfig(config)
-      setEditMode('form')
+      loadFormConfig(config);
+      setEditMode("form");
     } catch {
-      addToast('JSON 格式错误', 'error')
+      addToast("JSON 格式错误", "error");
     }
-  }
+  };
 
   const toggleModelEditorMode = () => {
-    if (modelEditorMode === 'visual') {
-      const result = parseModelsFromRows(modelRows)
+    if (modelEditorMode === "visual") {
+      const result = parseModelsFromRows(modelRows);
       if (result.error) {
-        addToast(result.error, 'error')
-        return
+        addToast(result.error, "error");
+        return;
       }
 
-      setModelJsonValue(serializeModels(result.models))
-      setModelEditorMode('json')
-      return
+      setModelJsonValue(serializeModels(result.models));
+      setModelEditorMode("json");
+      return;
     }
 
-    const result = parseModelsFromJson(modelJsonValue)
+    const result = parseModelsFromJson(modelJsonValue);
     if (result.error) {
-      addToast(result.error, 'error')
-      return
+      addToast(result.error, "error");
+      return;
     }
 
-    applyModels(result.models)
-    setModelEditorMode('visual')
-  }
+    applyModels(result.models);
+    setModelEditorMode("visual");
+  };
 
   const setModelEditorModeWithSync = (nextMode: ModelEditorMode) => {
     if (nextMode === modelEditorMode) {
-      return
+      return;
     }
 
-    toggleModelEditorMode()
-  }
+    toggleModelEditorMode();
+  };
 
   const updateModelRowsState = (nextRows: ModelRow[]) => {
-    const normalizedRows = ensureTrailingEmptyModelRow(nextRows)
-    setModelRows(normalizedRows)
-    const result = parseModelsFromRows(normalizedRows)
+    const normalizedRows = ensureTrailingEmptyModelRow(nextRows);
+    setModelRows(normalizedRows);
+    const result = parseModelsFromRows(normalizedRows);
     if (!result.error) {
-      setFormData((prev) => ({ ...prev, models: result.models }))
-      setModelJsonValue(serializeModels(result.models))
+      setFormData((prev) => ({ ...prev, models: result.models }));
+      setModelJsonValue(serializeModels(result.models));
     }
-  }
+  };
 
   const updateModelRow = (index: number, field: keyof ModelRow, value: string) => {
-    const nextRows = [...modelRows]
-    const previousRow = nextRows[index] || createEmptyModelRow()
+    const nextRows = [...modelRows];
+    const previousRow = nextRows[index] || createEmptyModelRow();
     const nextRow = {
       ...previousRow,
       [field]: value,
+    };
+
+    if (field === "id" && (!previousRow.name.trim() || previousRow.name.trim() === previousRow.id.trim())) {
+      nextRow.name = value;
     }
 
-    if (field === 'id' && (!previousRow.name.trim() || previousRow.name.trim() === previousRow.id.trim())) {
-      nextRow.name = value
-    }
-
-    nextRows[index] = nextRow
-    updateModelRowsState(nextRows)
-  }
+    nextRows[index] = nextRow;
+    updateModelRowsState(nextRows);
+  };
 
   const removeModelRow = (index: number) => {
-    const meaningfulRows = modelRows.filter((row) => !isEmptyModelRow(row))
+    const meaningfulRows = modelRows.filter((row) => !isEmptyModelRow(row));
     if (meaningfulRows.length === 0) {
-      updateModelRowsState([createEmptyModelRow()])
-      return
+      updateModelRowsState([createEmptyModelRow()]);
+      return;
     }
 
-    const nextRows = modelRows.filter((_, rowIndex) => rowIndex !== index)
-    updateModelRowsState(nextRows)
-  }
+    const nextRows = modelRows.filter((_, rowIndex) => rowIndex !== index);
+    updateModelRowsState(nextRows);
+  };
 
   const getTypeLabel = (type: string) => {
-    return channelTypes.find((item) => item.value === type)?.label || type
-  }
+    return channelTypes.find((item) => item.value === type)?.label || type;
+  };
 
   const filteredData = data?.filter((channel) => {
-    if (!searchQuery) return true
-    const rawConfig = parseChannelValue(channel)
-    const config = normalizeChannelFormConfig(rawConfig)
+    if (!searchQuery) return true;
+    const rawConfig = parseChannelValue(channel);
+    const config = normalizeChannelFormConfig(rawConfig);
     return (
       config.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       channel.key.toLowerCase().includes(searchQuery.toLowerCase())
-    )
-  })
-  const endpointPreview = getChannelEndpointPreview(formData.type, formData.endpoint)
-  const endpointPlaceholder = getChannelEndpointPlaceholder(formData.type)
+    );
+  });
+  const endpointPreview = getChannelEndpointPreview(formData.type, formData.endpoint);
+  const endpointPlaceholder = getChannelEndpointPlaceholder(formData.type);
 
-  if (view === 'list') {
+  if (view === "list") {
     return (
       <PageContainer
         title="渠道管理"
@@ -841,7 +842,7 @@ export function Channels({
         actions={
           <div className="flex items-center gap-2">
             <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching}>
-              <RefreshCw className={cn('h-4 w-4', isFetching && 'animate-spin')} />
+              <RefreshCw className={cn("h-4 w-4", isFetching && "animate-spin")} />
             </Button>
             <Button size="sm" onClick={handleAdd}>
               <Plus className="h-4 w-4" />
@@ -891,12 +892,13 @@ export function Channels({
           <Card>
             <div className="divide-y">
               {filteredData?.map((channel) => {
-                const rawConfig = parseChannelValue(channel)
-                const config = normalizeChannelFormConfig(rawConfig)
-                const modelCount = (config.models || []).length
-                const isMenuOpen = openMenu === channel.key
-                const isEnabled = config.enabled !== false
-                const isToggling = toggleEnabledMutation.isPending && toggleEnabledMutation.variables?.channel.key === channel.key
+                const rawConfig = parseChannelValue(channel);
+                const config = normalizeChannelFormConfig(rawConfig);
+                const modelCount = (config.models || []).length;
+                const isMenuOpen = openMenu === channel.key;
+                const isEnabled = config.enabled !== false;
+                const isToggling =
+                  toggleEnabledMutation.isPending && toggleEnabledMutation.variables?.channel.key === channel.key;
 
                 return (
                   <div key={channel.key} className="p-4 hover:bg-muted/30 transition-colors">
@@ -912,8 +914,8 @@ export function Channels({
                             size="icon"
                             className="h-8 w-8"
                             onClick={(e) => {
-                              e.stopPropagation()
-                              setOpenMenu(isMenuOpen ? null : channel.key)
+                              e.stopPropagation();
+                              setOpenMenu(isMenuOpen ? null : channel.key);
                             }}
                           >
                             <MoreHorizontal className="h-4 w-4" />
@@ -942,18 +944,25 @@ export function Channels({
                         <span className="px-2 py-0.5 rounded bg-muted text-muted-foreground text-xs">
                           {getTypeLabel(config.type)}
                         </span>
-                        <span className="text-muted-foreground">{modelCount} 个模型</span>
+                        <span className="px-2 py-0.5 rounded bg-indigo-500/10 text-indigo-600 text-xs">
+                          {modelCount} 个模型
+                        </span>
+                        <span className="px-2 py-0.5 rounded bg-amber-500/10 text-amber-600 text-xs">
+                          {config.weight ?? 0}
+                        </span>
                       </div>
                       <div className="flex items-center justify-between rounded-lg border bg-muted/20 px-3 py-2">
                         <div>
                           <div className="text-sm font-medium">运行状态</div>
                           <div
                             className={cn(
-                              'mt-1 text-xs font-medium',
-                              isEnabled ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400',
+                              "mt-1 text-xs font-medium",
+                              isEnabled
+                                ? "text-emerald-600 dark:text-emerald-400"
+                                : "text-amber-600 dark:text-amber-400",
                             )}
                           >
-                            {isEnabled ? '已启用' : '已停用'}
+                            {isEnabled ? "已启用" : "已停用"}
                           </div>
                         </div>
                         <Switch
@@ -976,19 +985,29 @@ export function Channels({
                         </span>
                       </div>
                       <div className="w-40 text-sm text-muted-foreground truncate font-mono" title={config.endpoint}>
-                        {config.endpoint.replace(/^https?:\/\//, '').split('/')[0]}
+                        {config.endpoint.replace(/^https?:\/\//, "").split("/")[0]}
                       </div>
-                      <div className="w-20 text-sm text-center flex-shrink-0">
-                        <span className="text-muted-foreground">{modelCount} 模型</span>
+                      {/* <div className="w-20 text-sm text-center flex-shrink-0">
+                        <span className="text-muted-foreground">{} 模型</span>
+                      </div> */}
+                      <div className="text-xs text-center flex-shrink-0">
+                        <span className="text-indigo-600 bg-indigo-500/10 px-3 h-6 rounded-full flex items-center justify-center">
+                          {modelCount} 个模型
+                        </span>
+                      </div>
+                      <div className="text-xs text-center flex-shrink-0">
+                        <span className="text-amber-600 bg-amber-500/10 w-6 h-6 rounded-full flex items-center justify-center">
+                          {config.weight ?? 0}
+                        </span>
                       </div>
                       <div className="flex items-center justify-between gap-2 flex-shrink-0">
                         <span
                           className={cn(
-                            'text-xs font-medium whitespace-nowrap',
-                            isEnabled ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400',
+                            "text-xs font-medium whitespace-nowrap",
+                            isEnabled ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400",
                           )}
                         >
-                          {isEnabled ? '已启用' : '已停用'}
+                          {isEnabled ? "已启用" : "已停用"}
                         </span>
                         <Switch
                           checked={isEnabled}
@@ -1001,13 +1020,18 @@ export function Channels({
                         <Button variant="ghost" size="sm" onClick={() => handleEdit(channel)}>
                           <Pencil className="h-4 w-4" />
                         </Button>
-                        <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive" onClick={() => handleDelete(channel.key)}>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-destructive hover:text-destructive"
+                          onClick={() => handleDelete(channel.key)}
+                        >
                           <Trash2 className="h-4 w-4" />
                         </Button>
                       </div>
                     </div>
                   </div>
-                )
+                );
               })}
               {filteredData?.length === 0 && searchQuery && (
                 <div className="p-8 text-center text-muted-foreground">未找到匹配的渠道</div>
@@ -1016,7 +1040,7 @@ export function Channels({
           </Card>
         )}
       </PageContainer>
-    )
+    );
   }
 
   if (isRouteEdit && isLoading && !editingKey) {
@@ -1029,7 +1053,7 @@ export function Channels({
           </div>
         </div>
       </div>
-    )
+    );
   }
 
   return (
@@ -1041,10 +1065,10 @@ export function Channels({
             返回列表
           </Button>
           <div className="flex items-center justify-between">
-            <h1 className="text-2xl font-bold tracking-tight">{editingKey ? '编辑渠道' : '添加渠道'}</h1>
+            <h1 className="text-2xl font-bold tracking-tight">{editingKey ? "编辑渠道" : "添加渠道"}</h1>
             <Button variant="outline" size="sm" onClick={toggleEditMode}>
-              {editMode === 'form' ? <FileJson className="h-4 w-4 mr-1" /> : <FileText className="h-4 w-4 mr-1" />}
-              {editMode === 'form' ? 'JSON' : '表单'}
+              {editMode === "form" ? <FileJson className="h-4 w-4 mr-1" /> : <FileText className="h-4 w-4 mr-1" />}
+              {editMode === "form" ? "JSON" : "表单"}
             </Button>
           </div>
         </div>
@@ -1064,14 +1088,16 @@ export function Channels({
             </CardContent>
           </Card>
 
-          {editMode === 'form' ? (
+          {editMode === "form" ? (
             <>
               <Card>
                 <CardContent className="p-5">
                   <h3 className="font-medium mb-4">基本信息</h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <Label className="text-sm">渠道名称 <span className="text-destructive">*</span></Label>
+                      <Label className="text-sm">
+                        渠道名称 <span className="text-destructive">*</span>
+                      </Label>
                       <Input
                         value={formData.name}
                         onChange={(e) => setFormData({ ...formData, name: e.target.value })}
@@ -1079,10 +1105,12 @@ export function Channels({
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label className="text-sm">渠道类型 <span className="text-destructive">*</span></Label>
+                      <Label className="text-sm">
+                        渠道类型 <span className="text-destructive">*</span>
+                      </Label>
                       <Select
                         value={formData.type}
-                        onChange={(e) => setFormData({ ...formData, type: e.target.value as ChannelConfig['type'] })}
+                        onChange={(e) => setFormData({ ...formData, type: e.target.value as ChannelConfig["type"] })}
                       >
                         {channelTypes.map((type) => (
                           <option key={type.value} value={type.value}>
@@ -1091,32 +1119,47 @@ export function Channels({
                         ))}
                       </Select>
                     </div>
-                    <div className="rounded-lg border bg-muted/20 px-4 py-3 md:col-span-2">
-                      <div className="flex items-center justify-between gap-4">
-                        <div>
-                          <Label className="text-sm">渠道状态</Label>
-                          <p className="mt-1 text-xs text-muted-foreground">
-                            停用后不会参与请求选路，也不会出现在可用模型列表中。
-                          </p>
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <span
-                            className={cn(
-                              'text-sm font-medium',
-                              formData.enabled !== false
-                                ? 'text-emerald-600 dark:text-emerald-400'
-                                : 'text-amber-600 dark:text-amber-400',
-                            )}
-                          >
-                            {formData.enabled !== false ? '已启用' : '已停用'}
-                          </span>
-                          <Switch
-                            checked={formData.enabled !== false}
-                            onCheckedChange={(checked) => setFormData({ ...formData, enabled: checked })}
-                            aria-label="渠道状态开关"
-                          />
-                        </div>
+                    <div className="space-y-2">
+                      <Label className="text-sm">渠道权重</Label>
+                      <Select
+                        value={String(formData.weight ?? 0)}
+                        onChange={(event) =>
+                          setFormData({
+                            ...formData,
+                            weight: normalizeChannelWeight(Number(event.target.value)),
+                          })
+                        }
+                      >
+                        {channelWeightOptions.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </Select>
+                      <p className="text-xs text-muted-foreground">相同模型权重优先，相同权重随机分配。</p>
+                    </div>
+                    <div className="">
+                      <Label className="text-sm">渠道状态</Label>
+                      <div className="h-10 flex items-center gap-3 mb-2 rounded-md px-3 border border-input shadow-sm">
+                        <span
+                          className={cn(
+                            "text-sm font-medium",
+                            formData.enabled !== false
+                              ? "text-emerald-600 dark:text-emerald-400"
+                              : "text-amber-600 dark:text-amber-400",
+                          )}
+                        >
+                          {formData.enabled !== false ? "已启用" : "已停用"}
+                        </span>
+                        <Switch
+                          checked={formData.enabled !== false}
+                          onCheckedChange={(checked) => setFormData({ ...formData, enabled: checked })}
+                          aria-label="渠道状态开关"
+                        />
                       </div>
+                      <p className="text-xs text-muted-foreground">
+                        停用后不会参与请求选路，也不会出现在可用模型列表中。
+                      </p>
                     </div>
                   </div>
                 </CardContent>
@@ -1136,19 +1179,19 @@ export function Channels({
                         onChange={(e) => setFormData({ ...formData, endpoint: e.target.value })}
                         placeholder={endpointPlaceholder}
                       />
-                      <p className="text-xs text-muted-foreground">
-                        预览：{endpointPreview || formData.type}
-                      </p>
+                      <p className="text-xs text-muted-foreground">预览：{endpointPreview || formData.type}</p>
                     </div>
                     <div className="space-y-2">
-                      <Label className="text-sm">API 密钥 <span className="text-destructive">*</span></Label>
+                      <Label className="text-sm">
+                        API 密钥 <span className="text-destructive">*</span>
+                      </Label>
                       <Textarea
                         value={apiKeysInput}
                         onChange={(e) => {
-                          setApiKeysInput(e.target.value)
-                          setFormData({ ...formData, api_keys: parseApiKeys(e.target.value) })
+                          setApiKeysInput(e.target.value);
+                          setFormData({ ...formData, api_keys: parseApiKeys(e.target.value) });
                         }}
-                        placeholder={'sk-xxx\nsk-yyy'}
+                        placeholder={"sk-xxx\nsk-yyy"}
                         rows={5}
                         className="font-mono text-sm"
                       />
@@ -1192,33 +1235,41 @@ export function Channels({
                         <Cpu className="h-4 w-4 text-muted-foreground" />
                         模型配置
                       </h3>
-                      <p className="text-sm text-muted-foreground">外部使用模型名称调用，程序会自动映射到渠道模型 ID。</p>
+                      <p className="text-sm text-muted-foreground">
+                        外部使用模型名称调用，程序会自动映射到渠道模型 ID。
+                      </p>
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
                       <Button
                         type="button"
-                        variant={modelEditorMode === 'visual' ? 'secondary' : 'outline'}
+                        variant={modelEditorMode === "visual" ? "secondary" : "outline"}
                         size="sm"
-                        onClick={() => setModelEditorModeWithSync('visual')}
+                        onClick={() => setModelEditorModeWithSync("visual")}
                       >
                         可视化
                       </Button>
                       <Button
                         type="button"
-                        variant={modelEditorMode === 'json' ? 'secondary' : 'outline'}
+                        variant={modelEditorMode === "json" ? "secondary" : "outline"}
                         size="sm"
-                        onClick={() => setModelEditorModeWithSync('json')}
+                        onClick={() => setModelEditorModeWithSync("json")}
                       >
                         JSON
                       </Button>
-                      <Button type="button" variant="outline" size="sm" onClick={handleFetchModels} disabled={fetchModelsMutation.isPending}>
-                        <RefreshCw className={cn('h-4 w-4', fetchModelsMutation.isPending && 'animate-spin')} />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={handleFetchModels}
+                        disabled={fetchModelsMutation.isPending}
+                      >
+                        <RefreshCw className={cn("h-4 w-4", fetchModelsMutation.isPending && "animate-spin")} />
                         获取模型列表
                       </Button>
                     </div>
                   </div>
 
-                  {modelEditorMode === 'visual' ? (
+                  {modelEditorMode === "visual" ? (
                     <div className="space-y-2">
                       <div className="hidden md:grid md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_56px] md:gap-2 text-xs font-medium text-muted-foreground">
                         <div>模型 ID</div>
@@ -1226,19 +1277,22 @@ export function Channels({
                         <div className="text-center">删除</div>
                       </div>
                       {modelRows.map((row, index) => {
-                        const canDelete = !isEmptyModelRow(row) || modelRows.length > 1
+                        const canDelete = !isEmptyModelRow(row) || modelRows.length > 1;
 
                         return (
-                          <div key={index} className="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_56px] gap-2">
+                          <div
+                            key={index}
+                            className="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_56px] gap-2"
+                          >
                             <Input
                               value={row.id}
-                              onChange={(e) => updateModelRow(index, 'id', e.target.value)}
+                              onChange={(e) => updateModelRow(index, "id", e.target.value)}
                               placeholder="模型ID，例如：gpt-4.1-mini"
                               className="text-sm"
                             />
                             <Input
                               value={row.name}
-                              onChange={(e) => updateModelRow(index, 'name', e.target.value)}
+                              onChange={(e) => updateModelRow(index, "name", e.target.value)}
                               placeholder="模型名称，默认等于模型ID"
                               className="text-sm"
                             />
@@ -1253,7 +1307,7 @@ export function Channels({
                               <Trash2 className="h-4 w-4" />
                             </Button>
                           </div>
-                        )
+                        );
                       })}
                     </div>
                   ) : (
@@ -1280,7 +1334,7 @@ export function Channels({
                   onChange={(e) => setJsonValue(e.target.value)}
                   rows={18}
                   className="font-mono text-sm"
-                  placeholder='{"name":"Azure OpenAI","type":"azure-openai","endpoint":"https://example.openai.azure.com/","enabled":true,"api_keys":["sk-1","sk-2"],"auto_retry":true,"auto_rotate":true,"models":[{"id":"gpt-4.1-mini","name":"gpt-4.1-mini"}]}'
+                  placeholder='{"name":"Azure OpenAI","type":"azure-openai","endpoint":"https://example.openai.azure.com/","enabled":true,"weight":0,"api_keys":["sk-1","sk-2"],"auto_retry":true,"auto_rotate":true,"models":[{"id":"gpt-4.1-mini","name":"gpt-4.1-mini"}]}'
                 />
               </CardContent>
             </Card>
@@ -1307,5 +1361,5 @@ export function Channels({
         </div>
       </div>
     </div>
-  )
+  );
 }
