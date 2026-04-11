@@ -944,7 +944,7 @@ export function Channels({ createMode = false, editRoute = false }: { createMode
                         <span className="px-2 py-0.5 rounded bg-muted text-muted-foreground text-xs">
                           {getTypeLabel(config.type)}
                         </span>
-                        <span className="px-2 py-0.5 rounded bg-indigo-500/10 text-indigo-600 text-xs">
+                        <span className="px-2 py-0.5 rounded bg-indigo-500/10 text-indigo-500 text-xs">
                           {modelCount} 个模型
                         </span>
                         <span className="px-2 py-0.5 rounded bg-amber-500/10 text-amber-600 text-xs">
@@ -991,7 +991,7 @@ export function Channels({ createMode = false, editRoute = false }: { createMode
                         <span className="text-muted-foreground">{} 模型</span>
                       </div> */}
                       <div className="text-xs text-center flex-shrink-0">
-                        <span className="text-indigo-600 bg-indigo-500/10 px-3 h-6 rounded-full flex items-center justify-center">
+                        <span className="text-indigo-500 bg-indigo-500/10 px-3 h-6 rounded-full flex items-center justify-center">
                           {modelCount} 个模型
                         </span>
                       </div>
@@ -1167,11 +1167,17 @@ export function Channels({ createMode = false, editRoute = false }: { createMode
 
               <Card>
                 <CardContent className="p-5">
-                  <h3 className="font-medium mb-4">连接配置</h3>
+                  <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between mb-4">
+                    <div>
+                      <h3 className="font-medium flex items-center gap-2">
+                        <Globe className="h-4 w-4 text-muted-foreground" />
+                        连接配置
+                      </h3>
+                    </div>
+                  </div>
                   <div className="space-y-4">
                     <div className="space-y-2">
                       <Label className="text-sm flex items-center gap-2">
-                        <Globe className="h-4 w-4 text-muted-foreground" />
                         API 端点 <span className="text-destructive">*</span>
                       </Label>
                       <Input

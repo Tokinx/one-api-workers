@@ -466,7 +466,7 @@ export function UsageLogs() {
                           <Button
                             variant="outline"
                             size="icon"
-                            className="h-8 w-8"
+                            className="h-8 w-8 text-gray-600 border-0 rounded-0 shadow-none"
                             onClick={() => setSelectedItem(item)}
                             aria-label="查看详情"
                           >
@@ -477,7 +477,7 @@ export function UsageLogs() {
                     ))}
                   </tbody>
                 </table>
-                <div className="mt-4 flex flex-col gap-3 border-t pt-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex flex-col gap-3 border-t pt-4 sm:flex-row sm:items-center sm:justify-between">
                   <div className="text-xs text-muted-foreground">
                     {totalItems > 0 ? `显示第 ${currentStart}-${currentEnd} 条，共 ${totalItems} 条` : "暂无记录"}
                   </div>
