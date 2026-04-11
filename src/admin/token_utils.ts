@@ -3,6 +3,15 @@ import { Context } from "hono";
 import { CONSTANTS } from "../constants";
 import { getJsonSetting } from "../utils";
 
+type UsageCostResult = {
+    totalCost: number;
+    requestCost: number;
+    inputCost: number;
+    outputCost: number;
+    cacheCost: number;
+    hasPricing: boolean;
+}
+
 // Token 工具对象
 export const TokenUtils = {
     async updateUsage(c: Context<HonoCustomType>, key: string, usageAmount: number): Promise<boolean> {
@@ -28,34 +37,75 @@ export const TokenUtils = {
         return globalPricingMap?.[model] || null;
     },
 
-    async processUsage(c: Context<HonoCustomType>, apiKey: string, model: string, targetChannelKey: string, targetChannelConfig: ChannelConfig, usage: Usage): Promise<void> {
-        console.log("Usage data:", usage);
-
+    async calculateUsageCost(
+        c: Context<HonoCustomType>,
+        model: string,
+        targetChannelConfig: ChannelConfig,
+        usage: Usage
+    ): Promise<UsageCostResult> {
         const pricing = await this.getPricing(c, model, targetChannelConfig);
         const hasTokens = usage.prompt_tokens != null && usage.completion_tokens != null;
-        const requestCost = pricing?.request || 0
+        const requestCost = pricing?.request || 0;
 
-        if (pricing && (hasTokens || requestCost > 0)) {
-            const inputCost = hasTokens ? usage.prompt_tokens! * pricing.input : 0;
-            const outputCost = hasTokens ? usage.completion_tokens! * pricing.output : 0;
+        if (!pricing || (!hasTokens && requestCost <= 0)) {
+            return {
+                totalCost: 0,
+                requestCost,
+                inputCost: 0,
+                outputCost: 0,
+                cacheCost: 0,
+                hasPricing: false,
+            };
+        }
 
-            let cacheCost = 0;
-            if (hasTokens && usage.cached_tokens && usage.cached_tokens > 0 && pricing.cache) {
-                cacheCost = usage.cached_tokens * pricing.cache;
-            }
+        const inputCost = hasTokens ? usage.prompt_tokens! * pricing.input : 0;
+        const outputCost = hasTokens ? usage.completion_tokens! * pricing.output : 0;
 
-            const totalCost = inputCost + outputCost + cacheCost + requestCost;
+        let cacheCost = 0;
+        if (hasTokens && usage.cached_tokens && usage.cached_tokens > 0 && pricing.cache) {
+            cacheCost = usage.cached_tokens * pricing.cache;
+        }
 
-            await this.updateUsage(c, apiKey, totalCost);
+        return {
+            totalCost: inputCost + outputCost + cacheCost + requestCost,
+            requestCost,
+            inputCost,
+            outputCost,
+            cacheCost,
+            hasPricing: true,
+        };
+    },
+
+    async processUsage(
+        c: Context<HonoCustomType>,
+        apiKey: string,
+        model: string,
+        targetChannelKey: string,
+        targetChannelConfig: ChannelConfig,
+        usage: Usage
+    ): Promise<UsageCostResult> {
+        console.log("Usage data:", usage);
+
+        const costResult = await this.calculateUsageCost(c, model, targetChannelConfig, usage);
+
+        if (costResult.hasPricing) {
+            await this.updateUsage(c, apiKey, costResult.totalCost);
 
             const maskedApiKey = apiKey.length < 3 ? '*'.repeat(apiKey.length) : (
                 apiKey.slice(0, apiKey.length / 3)
                 + '*'.repeat(apiKey.length / 3)
                 + apiKey.slice((2 * apiKey.length) / 3)
             );
-            console.log(`Model: ${model}, Channel: ${targetChannelKey}, apiKey: ${maskedApiKey}, Cost: ${totalCost} (request: ${requestCost}, input: ${inputCost}, cache: ${cacheCost}, output: ${outputCost})`);
+            console.log(
+                `Model: ${model}, Channel: ${targetChannelKey}, apiKey: ${maskedApiKey}, `
+                + `Cost: ${costResult.totalCost} (request: ${costResult.requestCost}, `
+                + `input: ${costResult.inputCost}, cache: ${costResult.cacheCost}, `
+                + `output: ${costResult.outputCost})`
+            );
         } else {
             console.warn(`No pricing found for model: ${model} in channel: ${targetChannelKey}`);
         }
+
+        return costResult;
     }
 };

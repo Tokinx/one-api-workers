@@ -4,11 +4,19 @@ import { RouteId, getRoutePolicy } from "./route-policy"
 import { findChannelModelMapping } from "../../utils"
 import { TokenUtils } from "../../admin/token_utils"
 import { normalizeChannelConfig } from "../../channel-config"
+import {
+    buildUsageRequestMetadata,
+    hashTokenKey,
+    writeUsageFailureEvent,
+    writeUsageSuccessEvent,
+} from "../../analytics/usage-logger"
 
 export type ChannelResolution = {
     channel: { key: string; config: ChannelConfig }
     requestBody: any
     saveUsage: (usage: Usage) => Promise<void>
+    logFailure: (errorCode: string, errorSummary?: string) => void
+    trackingState: RequestTrackingState
 }
 
 export const resolveChannel = async (
@@ -90,6 +98,35 @@ export const resolveChannel = async (
     const selectedChannel = availableChannels[randomIndex];
     const targetChannelKey = selectedChannel.key;
     const targetChannelConfig = selectedChannel.config;
+    const trackingState: RequestTrackingState = {
+        retryCount: 0,
+    };
+    const requestStartedAt = Date.now();
+    const tokenHash = await hashTokenKey(apiKey);
+    const tokenName = tokenData.name?.trim() || "未命名令牌";
+    const requestMetadata = buildUsageRequestMetadata(c);
+    const usageContext = {
+        routeId,
+        tokenHash,
+        tokenName,
+        channelKey: targetChannelKey,
+        providerType: targetChannelConfig.type || "unknown",
+        requestedModel,
+        upstreamModel: selectedChannel.mapping.id,
+        streamMode: requestBody.stream ? "stream" as const : "sync" as const,
+        requestId: requestMetadata.requestId,
+        traceId: requestMetadata.traceId,
+        clientIp: requestMetadata.clientIp,
+        userAgent: requestMetadata.userAgent,
+        country: requestMetadata.country,
+        region: requestMetadata.region,
+        city: requestMetadata.city,
+        colo: requestMetadata.colo,
+        timezone: requestMetadata.timezone,
+        startedAt: requestStartedAt,
+        trackingState,
+    };
+    let usageLogState: "idle" | "processing" | "done" = "idle";
 
     requestBody.model = selectedChannel.mapping.id;
 
@@ -98,16 +135,41 @@ export const resolveChannel = async (
     }
 
     const saveUsage = async (usage: Usage) => {
+        if (usageLogState !== "idle") {
+            return;
+        }
+
+        usageLogState = "processing";
         try {
-            await TokenUtils.processUsage(c, apiKey, requestedModel, targetChannelKey, targetChannelConfig, usage);
+            const costResult = await TokenUtils.processUsage(
+                c,
+                apiKey,
+                requestedModel,
+                targetChannelKey,
+                targetChannelConfig,
+                usage
+            );
+            writeUsageSuccessEvent(c, usageContext, usage, costResult);
+            usageLogState = "done";
         } catch (error) {
+            usageLogState = "idle";
             console.error('Error processing usage:', error);
         }
+    };
+
+    const logFailure = (errorCode: string, errorSummary?: string) => {
+        if (usageLogState === "done") {
+            return;
+        }
+
+        writeUsageFailureEvent(c, usageContext, { errorCode, errorSummary });
     };
 
     return {
         channel: { key: targetChannelKey, config: targetChannelConfig },
         requestBody,
         saveUsage,
+        logFailure,
+        trackingState,
     };
 }

@@ -12,7 +12,7 @@
 - 🚀 **基于 Cloudflare Workers**：全球分布式网络、低延迟、高性能
 - 🔐 **多渠道**：支持 OpenAI、Gemini、Azure OpenAI、Claude 等多种 AI 服务商
 - 🎫 **负载均衡**：支持多KEY/渠道间分配请求，自动重试+自动轮换，确保高可用性
-- 📊 **用量统计<sup>*</sup>**：Analytics Engine 实时统计，精确成本核算与日志回溯
+- 📊 **用量统计**：Analytics Engine 实时统计，支持日志回溯便于成本分析
 - 💰 **定价管理**：灵活的模型定价配置
 - 🎨 **Web 管理界面**：直观的 Web 界面进行配置管理
 - 🧪 **API 测试工具**：内置 API 测试功能，支持实时调试

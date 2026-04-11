@@ -1,4 +1,16 @@
-import { ApiResponse, AudioTestResponse, TestResponse } from '@/types'
+import {
+  ApiResponse,
+  AudioTestResponse,
+  TestResponse,
+  AnalyticsOverviewData,
+  AnalyticsTrendData,
+  AnalyticsBreakdownData,
+  AnalyticsEventsData,
+  AnalyticsBreakdownDimension,
+  AnalyticsRange,
+  UsageLogFilters,
+  UsageLogSearchData,
+} from '@/types'
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || ''
 
@@ -121,6 +133,19 @@ function buildAudioFilename(endpoint: string, contentType: string): string {
   return `${suffix}.${extension}`
 }
 
+function buildQueryString(params: Record<string, string | number | undefined>): string {
+  const searchParams = new URLSearchParams()
+
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== '') {
+      searchParams.set(key, String(value))
+    }
+  })
+
+  const query = searchParams.toString()
+  return query ? `?${query}` : ''
+}
+
 // 统一请求方法
 async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const url = `${BASE_URL}${endpoint}`
@@ -193,6 +218,38 @@ export const apiClient = {
       method: 'POST',
       body: JSON.stringify(config),
     }),
+
+  // Analytics APIs
+  getAnalyticsOverview: (range: AnalyticsRange) =>
+    request<ApiResponse<AnalyticsOverviewData>>(`/api/admin/analytics/overview?range=${encodeURIComponent(range)}`, { method: 'GET' }),
+
+  getAnalyticsTrend: (range: AnalyticsRange) =>
+    request<ApiResponse<AnalyticsTrendData>>(`/api/admin/analytics/trend?range=${encodeURIComponent(range)}`, { method: 'GET' }),
+
+  getAnalyticsBreakdown: (range: AnalyticsRange, dimension: AnalyticsBreakdownDimension) =>
+    request<ApiResponse<AnalyticsBreakdownData>>(
+      `/api/admin/analytics/breakdown?range=${encodeURIComponent(range)}&dimension=${encodeURIComponent(dimension)}`,
+      { method: 'GET' }
+    ),
+
+  getAnalyticsEvents: (range: AnalyticsRange, limit = 40) =>
+    request<ApiResponse<AnalyticsEventsData>>(
+      `/api/admin/analytics/events?range=${encodeURIComponent(range)}&limit=${encodeURIComponent(String(limit))}`,
+      { method: 'GET' }
+    ),
+
+  getUsageLogs: (filters: UsageLogFilters) =>
+    request<ApiResponse<UsageLogSearchData>>(
+      `/api/admin/usage-logs${buildQueryString({
+        start: filters.start,
+        end: filters.end,
+        dimension: filters.dimension,
+        keyword: filters.keyword,
+        result: filters.result,
+        page: filters.page,
+      })}`,
+      { method: 'GET' }
+    ),
 
   // API Test - 使用自定义 token，不走通用拦截器
   testApi: async (endpoint: string, token: string, body: unknown): Promise<TestResponse> => {

@@ -42,14 +42,22 @@ class UnifiedProxyEndpoint extends OpenAPIRoute {
         const result = await resolveChannel(c, routeId)
         if (result instanceof Response) return result
 
-        const { channel, requestBody, saveUsage } = result
+        const { channel, requestBody, saveUsage, logFailure, trackingState } = result
 
         const provider = getProvider(channel.config.type || "")
         if (!provider) {
             return c.text("Channel type not supported", 400)
         }
 
-        return executeWithChannelKeys(c, channel.config, requestBody, saveUsage, provider)
+        return executeWithChannelKeys(
+            c,
+            channel.config,
+            requestBody,
+            saveUsage,
+            logFailure,
+            trackingState,
+            provider
+        )
     }
 }
 

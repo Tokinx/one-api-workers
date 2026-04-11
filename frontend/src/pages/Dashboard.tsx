@@ -24,7 +24,7 @@ const features = [
   {
     icon: BarChart3,
     title: "用量追踪",
-    description: "Analytics Engine 实时统计，精确成本核算与日志回溯。",
+    description: "Analytics Engine 实时统计，支持日志回溯便于成本分析。",
     gradient: "from-amber-500/10 to-orange-500/10",
     iconBg: "from-amber-500 to-orange-500",
     delay: "100ms",

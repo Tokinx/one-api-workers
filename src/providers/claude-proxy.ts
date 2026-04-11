@@ -261,6 +261,7 @@ export default {
         config: ChannelConfig,
         requestBody: any,
         saveUsage: (usage: Usage) => Promise<void>,
+        trackingState: RequestTrackingState,
     ): Promise<Response> {
         const { stream } = requestBody;
 
@@ -272,6 +273,7 @@ export default {
         // Build and send proxy request
         const proxyRequest = buildProxyRequest(c.req.raw, requestBody, config)
         const response = await fetch(proxyRequest)
+        trackingState.upstreamStatus = response.status
 
         // Handle streaming response
         if (stream) {

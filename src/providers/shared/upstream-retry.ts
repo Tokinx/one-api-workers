@@ -5,6 +5,10 @@ import {
     MAX_ROTATION_ATTEMPTS,
     normalizeChannelConfig,
 } from "../../channel-config";
+import {
+    summarizeErrorFromResponse,
+    summarizeErrorFromUnknown,
+} from "../../analytics/usage-logger";
 import { ProviderFetch } from "./provider-registry";
 
 const RETRYABLE_STATUS_CODES = new Set([401, 403, 408, 409, 429, 500, 502, 503, 504, 529]);
@@ -56,6 +60,8 @@ export const executeWithChannelKeys = async (
     config: ChannelConfig,
     requestBody: any,
     saveUsage: (usage: Usage) => Promise<void>,
+    logFailure: (errorCode: string, errorSummary?: string) => void,
+    trackingState: RequestTrackingState,
     provider: ProviderFetch,
 ): Promise<Response> => {
     const normalizedConfig = normalizeChannelConfig(config);
@@ -77,6 +83,7 @@ export const executeWithChannelKeys = async (
             const isLastKey = keyIndex === candidateKeys.length - 1;
 
             try {
+                trackingState.retryCount = keyIndex * attemptsPerKey + attemptIndex;
                 const runtimeConfig: ChannelConfig = {
                     ...normalizedConfig,
                     api_key: currentKey,
@@ -88,6 +95,7 @@ export const executeWithChannelKeys = async (
                     runtimeConfig,
                     cloneRequestBody(requestBody),
                     saveUsage,
+                    trackingState,
                 );
 
                 if (response.ok) {
@@ -95,6 +103,9 @@ export const executeWithChannelKeys = async (
                 }
 
                 if (!shouldRetryResponse(response)) {
+                    const errorSummary = await summarizeErrorFromResponse(response);
+                    trackingState.errorSummary = errorSummary;
+                    logFailure(`http_${response.status}`, errorSummary);
                     return response;
                 }
 
@@ -106,6 +117,9 @@ export const executeWithChannelKeys = async (
                 );
 
                 if (isLastAttemptForKey && isLastKey) {
+                    const errorSummary = await summarizeErrorFromResponse(response);
+                    trackingState.errorSummary = errorSummary;
+                    logFailure(`http_${response.status}`, errorSummary);
                     return response;
                 }
 
@@ -119,6 +133,9 @@ export const executeWithChannelKeys = async (
                 );
 
                 if (isLastAttemptForKey && isLastKey) {
+                    trackingState.upstreamStatus = 0;
+                    trackingState.errorSummary = summarizeErrorFromUnknown(error);
+                    logFailure("upstream_exception", trackingState.errorSummary);
                     const message = error instanceof Error ? error.message : "Unknown upstream error";
                     return c.text(`Upstream request failed: ${message}`, 502);
                 }

@@ -5,6 +5,8 @@ import { AppLayout } from "./components/layout/AppLayout";
 import { Toaster } from "./components/ui/toaster";
 import { useAuthStore } from "./store/auth";
 import { Dashboard } from "./pages/Dashboard";
+import { Analytics } from "./pages/Analytics";
+import { UsageLogs } from "./pages/UsageLogs";
 import { Channels } from "./pages/Channels";
 import { Tokens } from "./pages/Tokens";
 import { Pricing } from "./pages/Pricing";
@@ -42,7 +44,7 @@ function HomeRoute() {
   }
 
   if (isAuthenticated) {
-    return <Navigate to="/channels" replace />;
+    return <Navigate to="/dashboard" replace />;
   }
 
   return <Dashboard />;
@@ -61,11 +63,28 @@ function App() {
         <AppLayout>
           <Routes>
             <Route path="/" element={<HomeRoute />} />
+            <Route path="/analytics" element={<Navigate to="/dashboard" replace />} />
             <Route
               path="/api-test"
               element={
                 <ProtectedRoute>
                   <ApiTest />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/dashboard"
+              element={
+                <ProtectedRoute>
+                  <Analytics />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/usage-logs"
+              element={
+                <ProtectedRoute>
+                  <UsageLogs />
                 </ProtectedRoute>
               }
             />

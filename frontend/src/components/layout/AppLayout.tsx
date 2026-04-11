@@ -41,7 +41,7 @@ export function AppLayout({ children }: AppLayoutProps) {
       setAdminToken('')
       setIsMobileNavOpen(false)
       addToast('登录成功', 'success')
-      navigate('/channels', { replace: true })
+      navigate('/dashboard', { replace: true })
     } catch (error) {
       setAuthError(error instanceof Error ? error.message : '管理员令牌无效')
     } finally {

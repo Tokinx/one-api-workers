@@ -11,6 +11,13 @@ import {
 import {
     PricingGetEndpoint, PricingUpdateEndpoint
 } from "./pricing_api"
+import {
+    AnalyticsOverviewEndpoint,
+    AnalyticsTrendEndpoint,
+    AnalyticsBreakdownEndpoint,
+    AnalyticsEventsEndpoint,
+    UsageLogSearchEndpoint,
+} from "./analytics_api"
 
 const app = new Hono<HonoCustomType>()
 export const api = fromHono(app)
@@ -47,3 +54,10 @@ api.delete("/api/admin/token/:key", TokenDeleteEndpoint)
 // Pricing management routes
 api.get("/api/admin/pricing", PricingGetEndpoint)
 api.post("/api/admin/pricing", PricingUpdateEndpoint)
+
+// Analytics management routes
+api.get("/api/admin/analytics/overview", AnalyticsOverviewEndpoint)
+api.get("/api/admin/analytics/trend", AnalyticsTrendEndpoint)
+api.get("/api/admin/analytics/breakdown", AnalyticsBreakdownEndpoint)
+api.get("/api/admin/analytics/events", AnalyticsEventsEndpoint)
+api.get("/api/admin/usage-logs", UsageLogSearchEndpoint)

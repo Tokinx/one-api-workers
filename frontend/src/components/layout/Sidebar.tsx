@@ -4,6 +4,8 @@ import {
   Link as LinkIcon,
   Key,
   DollarSign,
+  BarChart3,
+  FileText,
   TestTube2,
   GitBranch,
   Moon,
@@ -24,6 +26,8 @@ interface NavItem {
 }
 
 const navItems: NavItem[] = [
+  { title: "总览看板", href: "/dashboard", icon: BarChart3 },
+  { title: "使用日志", href: "/usage-logs", icon: FileText },
   { title: "渠道管理", href: "/channels", icon: LinkIcon },
   { title: "令牌管理", href: "/tokens", icon: Key },
   { title: "定价管理", href: "/pricing", icon: DollarSign },

@@ -11,7 +11,8 @@ export type ProviderFetch = (
     c: Context<HonoCustomType>,
     config: ChannelConfig,
     requestBody: any,
-    saveUsage: (usage: Usage) => Promise<void>
+    saveUsage: (usage: Usage) => Promise<void>,
+    trackingState: RequestTrackingState,
 ) => Promise<Response>
 
 const providerMap: Record<string, ProviderFetch> = {

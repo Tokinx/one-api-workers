@@ -2,11 +2,26 @@ type Variables = {
     lang: string | undefined | null
 }
 
+type AnalyticsEngineDataPoint = {
+    blobs?: string[];
+    doubles?: number[];
+    indexes?: string[];
+}
+
+interface AnalyticsEngineDataset {
+    writeDataPoint: (point: AnalyticsEngineDataPoint) => void;
+    writeDataPoints?: (points: AnalyticsEngineDataPoint[]) => void;
+}
+
 type CloudflareBindings = {
     DB: D1Database;
     ASSETS: Fetcher;
     ADMIN_TOKEN: string;
+    CF_API_TOKEN?: string;
+    CF_ACCOUNT_ID?: string;
     FRONTEND_DEV_SERVER_URL?: string;
+    USAGE_ANALYTICS?: AnalyticsEngineDataset;
+    USAGE_ANALYTICS_DATASET?: string;
 }
 
 type HonoCustomType = {
@@ -102,4 +117,10 @@ type ApiTokenData = {
     name: string;
     channel_keys: string[];
     total_quota: number;
+}
+
+type RequestTrackingState = {
+    retryCount: number;
+    upstreamStatus?: number;
+    errorSummary?: string;
 }

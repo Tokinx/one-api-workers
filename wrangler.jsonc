@@ -4,7 +4,9 @@
   "main": "src/index.ts",
   "compatibility_date": "2025-04-28",
   "workers_dev": true,
-  "vars": {},
+  "vars": {
+    "USAGE_ANALYTICS_DATASET": "usage_events_by_token"
+  },
   "secrets": {
     "required": [
       "ADMIN_TOKEN",
@@ -23,6 +25,12 @@
       "binding": "DB",
       "database_name": "one-api-workers",
       "database_id": ""
+    }
+  ],
+  "analytics_engine_datasets": [
+    {
+      "binding": "USAGE_ANALYTICS",
+      "dataset": "usage_events_by_token"
     }
   ]
 }

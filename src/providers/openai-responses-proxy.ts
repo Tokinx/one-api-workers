@@ -32,11 +32,13 @@ export default {
         config: ChannelConfig,
         requestBody: any,
         saveUsage: (usage: Usage) => Promise<void>,
+        trackingState: RequestTrackingState,
     ): Promise<Response> {
         const { stream } = requestBody
 
         const proxyRequest = buildProxyRequest(c.req.raw, requestBody, config)
         const response = await fetch(proxyRequest)
+        trackingState.upstreamStatus = response.status
 
         if (stream) {
             const [streamForClient, streamForServer] = response.body?.tee() || []
