@@ -13,6 +13,7 @@ type AutoCompleteProps = Omit<React.InputHTMLAttributes<HTMLInputElement>, 'valu
   value: string
   onChange: (value: string) => void
   options: AutoCompleteOption[]
+  maxOptions?: number
   emptyText?: string
   dropdownClassName?: string
   inputClassName?: string
@@ -41,6 +42,7 @@ export const AutoCompleteInput = React.forwardRef<HTMLInputElement, AutoComplete
       value,
       onChange,
       options,
+      maxOptions,
       emptyText = '无匹配结果',
       className,
       dropdownClassName,
@@ -78,7 +80,8 @@ export const AutoCompleteInput = React.forwardRef<HTMLInputElement, AutoComplete
     const dedupedOptions = options.filter((option, index) => {
       return options.findIndex((candidate) => candidate.value === option.value) === index
     })
-    const filteredOptions = dedupedOptions.filter((option) => matchesOption(option, query)).slice(0, 12)
+    const matchedOptions = dedupedOptions.filter((option) => matchesOption(option, query))
+    const filteredOptions = typeof maxOptions === 'number' ? matchedOptions.slice(0, maxOptions) : matchedOptions
 
     const handleSelect = (selectedValue: string) => {
       onChange(selectedValue)

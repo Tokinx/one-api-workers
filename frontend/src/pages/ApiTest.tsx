@@ -114,33 +114,10 @@ export function ApiTest() {
     [apiToken, tokens, channels]
   )
 
-  useEffect(() => {
-    if (availableModels.length === 0) {
-      return
-    }
-
-    if (modelValue) {
-      return
-    }
-
-    const nextModel = availableModels[0]
-    setModelValue(nextModel)
-    setRequestBody((currentBody) => {
-      try {
-        const parsedBody = JSON.parse(currentBody)
-        parsedBody.model = nextModel
-        return JSON.stringify(parsedBody, null, 2)
-      } catch {
-        return buildRequestBody(endpoint, nextModel)
-      }
-    })
-  }, [availableModels])
-
   const handleEndpointChange = (newEndpoint: string) => {
     setEndpoint(newEndpoint)
-    const nextModel = availableModels[0] || ''
-    setModelValue(nextModel)
-    setRequestBody(buildRequestBody(newEndpoint, nextModel))
+    setModelValue('')
+    setRequestBody(buildRequestBody(newEndpoint))
   }
 
   const handleCopyResponse = async () => {
@@ -167,7 +144,11 @@ export function ApiTest() {
 
     try {
       const parsedBody = JSON.parse(requestBody)
-      parsedBody.model = nextModel
+      if (nextModel) {
+        parsedBody.model = nextModel
+      } else {
+        delete parsedBody.model
+      }
       setRequestBody(JSON.stringify(parsedBody, null, 2))
     } catch {
       setRequestBody(buildRequestBody(endpoint, nextModel))
@@ -181,6 +162,8 @@ export function ApiTest() {
       const parsedBody = JSON.parse(value)
       if (typeof parsedBody?.model === 'string') {
         setModelValue(parsedBody.model)
+      } else {
+        setModelValue('')
       }
     } catch {
       // Keep the current model selection while the JSON is temporarily invalid.
@@ -289,6 +272,7 @@ export function ApiTest() {
                   placeholder="选择或输入模型名称"
                   inputClassName="font-mono"
                   options={modelOptions}
+                  maxOptions={availableModels.length}
                   emptyText="没有匹配的模型"
                 />
               </div>
