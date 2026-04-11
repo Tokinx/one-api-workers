@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { apiClient } from '@/api/client'
+import { clearScopedCacheByPrefix } from '@/lib/local-cache'
 
 interface AuthState {
   isAuthenticated: boolean
@@ -41,6 +42,8 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   logout: () => {
+    clearScopedCacheByPrefix('analytics:')
+    clearScopedCacheByPrefix('usage-logs:')
     localStorage.removeItem('adminToken')
     set({ isAuthenticated: false, error: null })
   },

@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
+import { readScopedCache, writeScopedCache } from "@/lib/local-cache";
 import { cn, formatCurrency } from "@/lib/utils";
 import { Eye, RefreshCw, RotateCcw, Search } from "lucide-react";
 
@@ -18,6 +19,13 @@ type UsageLogFilterState = {
   dimension: UsageLogFilterDimension;
   keyword: string;
   result: "all" | "success" | "failure";
+};
+
+type UsageLogPageCacheSnapshot = {
+  draftFilters: UsageLogFilterState;
+  appliedFilters: UsageLogFilterState;
+  currentPage: number;
+  data: UsageLogSearchData;
 };
 
 const FILTER_DIMENSIONS: Array<{ value: UsageLogFilterDimension; label: string }> = [
@@ -47,6 +55,7 @@ const RESULT_OPTIONS: Array<{ value: "all" | "success" | "failure"; label: strin
 ];
 
 const PAGINATION_WINDOW_SIZE = 5;
+const USAGE_LOGS_PAGE_CACHE_KEY = "usage-logs:page";
 
 const toDateTimeLocalValue = (date: Date): string => {
   const offset = date.getTimezoneOffset() * 60_000;
@@ -108,6 +117,16 @@ const buildSearchParams = (filters: UsageLogFilterState, page: number): UsageLog
   };
 };
 
+const isSameUsageLogFilterState = (left: UsageLogFilterState, right: UsageLogFilterState): boolean => {
+  return (
+    left.start === right.start &&
+    left.end === right.end &&
+    left.dimension === right.dimension &&
+    left.keyword === right.keyword &&
+    left.result === right.result
+  );
+};
+
 const ClientSummary = ({ item }: { item: AnalyticsEventItem }) => {
   const locationParts = [item.country, item.region, item.city].filter(Boolean);
 
@@ -137,17 +156,37 @@ const DetailField = ({ label, value, mono = false }: { label: string; value: str
 
 export function UsageLogs() {
   const defaultFilters = useMemo(() => createFilterPreset(24), []);
-  const [draftFilters, setDraftFilters] = useState<UsageLogFilterState>(defaultFilters);
-  const [appliedFilters, setAppliedFilters] = useState<UsageLogFilterState>(defaultFilters);
-  const [currentPage, setCurrentPage] = useState(1);
+  const cachedLogsSnapshot = useMemo(() => readScopedCache<UsageLogPageCacheSnapshot>(USAGE_LOGS_PAGE_CACHE_KEY), []);
+  const [draftFilters, setDraftFilters] = useState<UsageLogFilterState>(
+    () => cachedLogsSnapshot?.data.draftFilters ?? defaultFilters,
+  );
+  const [appliedFilters, setAppliedFilters] = useState<UsageLogFilterState>(
+    () => cachedLogsSnapshot?.data.appliedFilters ?? defaultFilters,
+  );
+  const [currentPage, setCurrentPage] = useState(() => Math.max(cachedLogsSnapshot?.data.currentPage ?? 1, 1));
   const [selectedItem, setSelectedItem] = useState<AnalyticsEventItem | null>(null);
+  const initialLogsData =
+    cachedLogsSnapshot?.data &&
+    cachedLogsSnapshot.data.currentPage === currentPage &&
+    isSameUsageLogFilterState(cachedLogsSnapshot.data.appliedFilters, appliedFilters)
+      ? cachedLogsSnapshot.data.data
+      : undefined;
 
   const logsQuery = useQuery({
     queryKey: ["usage-logs", appliedFilters, currentPage],
     queryFn: async () => {
       const response = await apiClient.getUsageLogs(buildSearchParams(appliedFilters, currentPage));
-      return response.data as UsageLogSearchData;
+      const data = response.data as UsageLogSearchData;
+      writeScopedCache(USAGE_LOGS_PAGE_CACHE_KEY, {
+        draftFilters: appliedFilters,
+        appliedFilters,
+        currentPage: data.page,
+        data,
+      });
+      return data;
     },
+    initialData: initialLogsData,
+    initialDataUpdatedAt: initialLogsData ? cachedLogsSnapshot?.updatedAt : undefined,
   });
 
   const activePage = logsQuery.data?.page ?? currentPage;

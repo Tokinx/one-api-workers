@@ -13,9 +13,10 @@ import { PageContainer } from "@/components/ui/page-container";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
+import { readScopedCache, writeScopedCache } from "@/lib/local-cache";
 import { cn, formatCurrency } from "@/lib/utils";
 import { Activity, CircleDollarSign, Clock3, DatabaseZap, RefreshCw, ShieldCheck } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 const RANGE_OPTIONS: Array<{ value: AnalyticsRange; label: string }> = [
   { value: "24h", label: "24 小时" },
@@ -77,55 +78,120 @@ const formatDuration = (value: number): string => {
   return `${Math.round(value)} ms`;
 };
 
+const ANALYTICS_RANGE_CACHE_KEY = "analytics:selected-range";
+
+const getAnalyticsOverviewCacheKey = (range: AnalyticsRange): string => `analytics:overview:${range}`;
+
+const getAnalyticsTrendCacheKey = (range: AnalyticsRange): string => `analytics:trend:${range}`;
+
+const getAnalyticsBreakdownCacheKey = (range: AnalyticsRange, dimension: AnalyticsBreakdownDimension): string =>
+  `analytics:breakdown:${range}:${dimension}`;
+
+const getInitialAnalyticsRange = (): AnalyticsRange => {
+  const cachedRange = readScopedCache<AnalyticsRange>(ANALYTICS_RANGE_CACHE_KEY)?.data;
+
+  return RANGE_OPTIONS.some((option) => option.value === cachedRange) ? cachedRange : "7d";
+};
+
 export function Analytics() {
-  const [range, setRange] = useState<AnalyticsRange>("7d");
+  const [range, setRange] = useState<AnalyticsRange>(getInitialAnalyticsRange);
+
+  const overviewCacheEntry = useMemo(
+    () => readScopedCache<AnalyticsOverviewData>(getAnalyticsOverviewCacheKey(range)),
+    [range],
+  );
+  const trendCacheEntry = useMemo(() => readScopedCache<AnalyticsTrendData>(getAnalyticsTrendCacheKey(range)), [range]);
+  const tokenBreakdownCacheEntry = useMemo(
+    () => readScopedCache<AnalyticsBreakdownData>(getAnalyticsBreakdownCacheKey(range, "token")),
+    [range],
+  );
+  const channelBreakdownCacheEntry = useMemo(
+    () => readScopedCache<AnalyticsBreakdownData>(getAnalyticsBreakdownCacheKey(range, "channel")),
+    [range],
+  );
+  const modelBreakdownCacheEntry = useMemo(
+    () => readScopedCache<AnalyticsBreakdownData>(getAnalyticsBreakdownCacheKey(range, "model")),
+    [range],
+  );
+  const providerBreakdownCacheEntry = useMemo(
+    () => readScopedCache<AnalyticsBreakdownData>(getAnalyticsBreakdownCacheKey(range, "provider")),
+    [range],
+  );
+
+  useEffect(() => {
+    writeScopedCache(ANALYTICS_RANGE_CACHE_KEY, range);
+  }, [range]);
 
   const overviewQuery = useQuery({
     queryKey: ["analytics", "overview", range],
     queryFn: async () => {
       const response = await apiClient.getAnalyticsOverview(range);
-      return response.data as AnalyticsOverviewData;
+      const data = response.data as AnalyticsOverviewData;
+      writeScopedCache(getAnalyticsOverviewCacheKey(range), data);
+      return data;
     },
+    initialData: overviewCacheEntry?.data,
+    initialDataUpdatedAt: overviewCacheEntry?.updatedAt,
   });
 
   const trendQuery = useQuery({
     queryKey: ["analytics", "trend", range],
     queryFn: async () => {
       const response = await apiClient.getAnalyticsTrend(range);
-      return response.data as AnalyticsTrendData;
+      const data = response.data as AnalyticsTrendData;
+      writeScopedCache(getAnalyticsTrendCacheKey(range), data);
+      return data;
     },
+    initialData: trendCacheEntry?.data,
+    initialDataUpdatedAt: trendCacheEntry?.updatedAt,
   });
 
   const tokenBreakdownQuery = useQuery({
     queryKey: ["analytics", "breakdown", range, "token"],
     queryFn: async () => {
       const response = await apiClient.getAnalyticsBreakdown(range, "token");
-      return response.data as AnalyticsBreakdownData;
+      const data = response.data as AnalyticsBreakdownData;
+      writeScopedCache(getAnalyticsBreakdownCacheKey(range, "token"), data);
+      return data;
     },
+    initialData: tokenBreakdownCacheEntry?.data,
+    initialDataUpdatedAt: tokenBreakdownCacheEntry?.updatedAt,
   });
 
   const channelBreakdownQuery = useQuery({
     queryKey: ["analytics", "breakdown", range, "channel"],
     queryFn: async () => {
       const response = await apiClient.getAnalyticsBreakdown(range, "channel");
-      return response.data as AnalyticsBreakdownData;
+      const data = response.data as AnalyticsBreakdownData;
+      writeScopedCache(getAnalyticsBreakdownCacheKey(range, "channel"), data);
+      return data;
     },
+    initialData: channelBreakdownCacheEntry?.data,
+    initialDataUpdatedAt: channelBreakdownCacheEntry?.updatedAt,
   });
 
   const modelBreakdownQuery = useQuery({
     queryKey: ["analytics", "breakdown", range, "model"],
     queryFn: async () => {
       const response = await apiClient.getAnalyticsBreakdown(range, "model");
-      return response.data as AnalyticsBreakdownData;
+      const data = response.data as AnalyticsBreakdownData;
+      writeScopedCache(getAnalyticsBreakdownCacheKey(range, "model"), data);
+      return data;
     },
+    initialData: modelBreakdownCacheEntry?.data,
+    initialDataUpdatedAt: modelBreakdownCacheEntry?.updatedAt,
   });
 
   const providerBreakdownQuery = useQuery({
     queryKey: ["analytics", "breakdown", range, "provider"],
     queryFn: async () => {
       const response = await apiClient.getAnalyticsBreakdown(range, "provider");
-      return response.data as AnalyticsBreakdownData;
+      const data = response.data as AnalyticsBreakdownData;
+      writeScopedCache(getAnalyticsBreakdownCacheKey(range, "provider"), data);
+      return data;
     },
+    initialData: providerBreakdownCacheEntry?.data,
+    initialDataUpdatedAt: providerBreakdownCacheEntry?.updatedAt,
   });
 
   const breakdownDataMap: Record<AnalyticsBreakdownDimension, AnalyticsBreakdownData | undefined> = {
