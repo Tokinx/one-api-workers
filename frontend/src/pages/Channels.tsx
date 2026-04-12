@@ -1007,7 +1007,7 @@ export function Channels({ createMode = false, editRoute = false }: { createMode
                 const modelCount = (config.models || []).length;
                 const enabledModelCount = (config.models || []).filter((model) => model.enabled !== false).length;
                 const modelSummary =
-                  enabledModelCount === modelCount ? `${modelCount} 个模型` : `${enabledModelCount}/${modelCount} 启用`;
+                  enabledModelCount === modelCount ? `${modelCount} 个模型` : `${enabledModelCount}/${modelCount} 个模型`;
                 const isMenuOpen = openMenu === channel.key;
                 const isEnabled = config.enabled !== false;
                 const isToggling =
