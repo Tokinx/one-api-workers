@@ -55,23 +55,23 @@
 }
 
 .dark {
-  --color-background: hsl(224 71% 4%);
+  --color-background: #0e0f11;
   --color-foreground: hsl(210 20% 98%);
-  --color-card: hsl(224 50% 8%);
+  --color-card: #131416;
   --color-card-foreground: hsl(210 20% 98%);
-  --color-popover: hsl(224 50% 8%);
+  --color-popover: #0e0f11;
   --color-popover-foreground: hsl(210 20% 98%);
 
-  --color-primary: hsl(234 89% 67%);
+  --color-primary: #1c1e20;
   --color-primary-foreground: hsl(0 0% 100%);
 
-  --color-secondary: hsl(224 40% 12%);
+  --color-secondary: #1c1e20;
   --color-secondary-foreground: hsl(210 20% 98%);
 
-  --color-muted: hsl(224 40% 12%);
+  --color-muted: #1c1e20;
   --color-muted-foreground: hsl(220 9% 56%);
 
-  --color-accent: hsl(224 40% 12%);
+  --color-accent: #191b1e;
   --color-accent-foreground: hsl(210 20% 98%);
 
   --color-destructive: hsl(0 72% 51%);
@@ -86,13 +86,13 @@
   --color-info: hsl(199 89% 42%);
   --color-info-foreground: hsl(0 0% 98%);
 
-  --color-border: hsl(224 30% 16%);
-  --color-input: hsl(224 30% 16%);
+  --color-border: #1c1d20;
+  --color-input: #1c1d20;
 
   --color-sidebar: hsl(224 71% 3%);
   --color-sidebar-foreground: hsl(210 20% 98%);
   --color-sidebar-muted: hsl(224 30% 10%);
-  --color-sidebar-accent: hsl(234 89% 67%);
+  --color-sidebar-accent: #363738;
 }
 
 @layer base {

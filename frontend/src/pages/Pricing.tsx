@@ -1,64 +1,55 @@
-import { useState, useEffect } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { apiClient } from '@/api/client'
-import { Channel, PricingConfig } from '@/types'
-import { AutoCompleteInput, type AutoCompleteOption } from '@/components/ui/autocomplete'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
-import { useToast } from '@/components/ui/use-toast'
-import { cn } from '@/lib/utils'
-import { getUniqueModelNamesFromChannels } from '@/lib/channel-models'
-import {
-  Plus,
-  RefreshCw,
-  Trash2,
-  FileJson,
-  FileText,
-  DollarSign,
-  Check,
-  Info,
-  Search,
-} from 'lucide-react'
-import { PageContainer } from '@/components/ui/page-container'
+import { useState, useEffect } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { apiClient } from "@/api/client";
+import { Channel, PricingConfig } from "@/types";
+import { AutoCompleteInput, type AutoCompleteOption } from "@/components/ui/autocomplete";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { useToast } from "@/components/ui/use-toast";
+import { cn } from "@/lib/utils";
+import { getUniqueModelNamesFromChannels } from "@/lib/channel-models";
+import { Plus, RefreshCw, Trash2, FileJson, FileText, DollarSign, Check, Info, Search } from "lucide-react";
+import { PageContainer } from "@/components/ui/page-container";
+import { Card } from "@/components/ui/card";
 
-type EditMode = 'table' | 'json'
+type EditMode = "table" | "json";
 
 export function Pricing() {
-  const [editMode, setEditMode] = useState<EditMode>('table')
-  const [jsonValue, setJsonValue] = useState('')
+  const [editMode, setEditMode] = useState<EditMode>("table");
+  const [jsonValue, setJsonValue] = useState("");
   const [pricingRows, setPricingRows] = useState<
     Array<{ model: string; input: number; output: number; cache: number; request: number }>
-  >([])
-  const [searchQuery, setSearchQuery] = useState('')
-  const [modelOptions, setModelOptions] = useState<AutoCompleteOption[]>([])
+  >([]);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [modelOptions, setModelOptions] = useState<AutoCompleteOption[]>([]);
 
-  const { addToast } = useToast()
-  const queryClient = useQueryClient()
+  const { addToast } = useToast();
+  const queryClient = useQueryClient();
 
   const { data, isLoading, isFetching, refetch } = useQuery({
-    queryKey: ['pricing'],
+    queryKey: ["pricing"],
     queryFn: async () => {
-      const response = await apiClient.getPricing()
-      return response.data as PricingConfig
+      const response = await apiClient.getPricing();
+      return response.data as PricingConfig;
     },
-  })
+  });
 
   useEffect(() => {
     const loadChannelModels = async () => {
       try {
-        const response = await apiClient.getChannels()
-        const channels = response.data as Channel[]
-        const modelNames = getUniqueModelNamesFromChannels(channels)
-        setModelOptions(modelNames.map((model) => ({ value: model })))
+        const response = await apiClient.getChannels();
+        const channels = response.data as Channel[];
+        const modelNames = getUniqueModelNamesFromChannels(channels);
+        setModelOptions(modelNames.map((model) => ({ value: model })));
       } catch (error) {
-        console.error('Failed to load channels for pricing suggestions:', error)
+        console.error("Failed to load channels for pricing suggestions:", error);
       }
-    }
+    };
 
-    loadChannelModels()
-  }, [])
+    loadChannelModels();
+  }, []);
 
   useEffect(() => {
     if (data) {
@@ -68,35 +59,35 @@ export function Pricing() {
         output: pricing.output,
         cache: pricing.cache || 0,
         request: pricing.request || 0,
-      }))
-      setPricingRows(rows)
-      setJsonValue(JSON.stringify(data, null, 2))
+      }));
+      setPricingRows(rows);
+      setJsonValue(JSON.stringify(data, null, 2));
     }
-  }, [data])
+  }, [data]);
 
   const saveMutation = useMutation({
     mutationFn: async (config: PricingConfig) => {
-      return apiClient.savePricing(config)
+      return apiClient.savePricing(config);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['pricing'] })
-      addToast('定价配置已保存', 'success')
+      queryClient.invalidateQueries({ queryKey: ["pricing"] });
+      addToast("定价配置已保存", "success");
     },
     onError: (error: Error) => {
-      addToast('保存失败：' + error.message, 'error')
+      addToast("保存失败：" + error.message, "error");
     },
-  })
+  });
 
   const handleSave = () => {
-    let config: PricingConfig
+    let config: PricingConfig;
 
-    if (editMode === 'table') {
+    if (editMode === "table") {
       if (pricingRows.length === 0) {
-        addToast('请至少添加一个模型定价', 'error')
-        return
+        addToast("请至少添加一个模型定价", "error");
+        return;
       }
 
-      config = {}
+      config = {};
       pricingRows.forEach((row) => {
         if (row.model) {
           config[row.model] = {
@@ -104,24 +95,24 @@ export function Pricing() {
             output: row.output || 0,
             cache: row.cache || 0,
             request: row.request || 0,
-          }
+          };
         }
-      })
+      });
     } else {
       try {
-        config = JSON.parse(jsonValue)
+        config = JSON.parse(jsonValue);
       } catch {
-        addToast('JSON格式错误', 'error')
-        return
+        addToast("JSON格式错误", "error");
+        return;
       }
     }
 
-    saveMutation.mutate(config)
-  }
+    saveMutation.mutate(config);
+  };
 
   const toggleEditMode = () => {
-    if (editMode === 'table') {
-      const config: PricingConfig = {}
+    if (editMode === "table") {
+      const config: PricingConfig = {};
       pricingRows.forEach((row) => {
         if (row.model) {
           config[row.model] = {
@@ -129,46 +120,50 @@ export function Pricing() {
             output: row.output || 0,
             cache: row.cache || 0,
             request: row.request || 0,
-          }
+          };
         }
-      })
-      setJsonValue(JSON.stringify(config, null, 2))
-      setEditMode('json')
+      });
+      setJsonValue(JSON.stringify(config, null, 2));
+      setEditMode("json");
     } else {
       try {
-        const config = JSON.parse(jsonValue)
+        const config = JSON.parse(jsonValue);
         const rows = Object.entries(config).map(([model, pricing]: [string, unknown]) => ({
           model,
           input: (pricing as { input: number }).input || 0,
           output: (pricing as { output: number }).output || 0,
           cache: (pricing as { cache?: number }).cache || 0,
           request: (pricing as { request?: number }).request || 0,
-        }))
-        setPricingRows(rows)
-        setEditMode('table')
+        }));
+        setPricingRows(rows);
+        setEditMode("table");
       } catch {
-        addToast('JSON格式错误', 'error')
+        addToast("JSON格式错误", "error");
       }
     }
-  }
+  };
 
   const addRow = () => {
-    setPricingRows([...pricingRows, { model: '', input: 0, output: 0, cache: 0, request: 0 }])
-  }
+    setPricingRows([...pricingRows, { model: "", input: 0, output: 0, cache: 0, request: 0 }]);
+  };
 
   const removeRow = (index: number) => {
-    setPricingRows(pricingRows.filter((_, i) => i !== index))
-  }
+    setPricingRows(pricingRows.filter((_, i) => i !== index));
+  };
 
-  const updateRow = (index: number, field: 'model' | 'input' | 'output' | 'cache' | 'request', value: string | number) => {
-    const newRows = [...pricingRows]
-    ;(newRows[index] as any)[field] = value
-    setPricingRows(newRows)
-  }
+  const updateRow = (
+    index: number,
+    field: "model" | "input" | "output" | "cache" | "request",
+    value: string | number,
+  ) => {
+    const newRows = [...pricingRows];
+    (newRows[index] as any)[field] = value;
+    setPricingRows(newRows);
+  };
 
   const filteredRows = pricingRows
     .map((row, index) => ({ ...row, _i: index }))
-    .filter((row) => row.model.toLowerCase().includes(searchQuery.toLowerCase()))
+    .filter((row) => row.model.toLowerCase().includes(searchQuery.toLowerCase()));
 
   const pricingModelOptions = [
     ...pricingRows
@@ -176,7 +171,7 @@ export function Pricing() {
       .filter((model) => model.length > 0)
       .map((model) => ({ value: model })),
     ...modelOptions,
-  ].filter((option, index, options) => options.findIndex((candidate) => candidate.value === option.value) === index)
+  ].filter((option, index, options) => options.findIndex((candidate) => candidate.value === option.value) === index);
 
   return (
     <PageContainer
@@ -188,8 +183,8 @@ export function Pricing() {
             <RefreshCw className={cn("h-4 w-4", isFetching && "animate-spin")} />
           </Button>
           <Button variant="outline" size="sm" onClick={toggleEditMode}>
-            {editMode === 'table' ? <FileJson className="h-4 w-4" /> : <FileText className="h-4 w-4" />}
-            <span className="hidden sm:inline ml-1">{editMode === 'table' ? 'JSON' : '表格'}</span>
+            {editMode === "table" ? <FileJson className="h-4 w-4" /> : <FileText className="h-4 w-4" />}
+            <span className="hidden sm:inline ml-1">{editMode === "table" ? "JSON" : "表格"}</span>
           </Button>
           <Button size="sm" onClick={handleSave} disabled={saveMutation.isPending}>
             <Check className="h-4 w-4 mr-1" />
@@ -198,7 +193,7 @@ export function Pricing() {
         </div>
       }
     >
-      {editMode === 'table' ? (
+      {editMode === "table" ? (
         isLoading ? (
           <div className="flex items-center justify-center py-20">
             <div className="flex flex-col items-center gap-3">
@@ -207,17 +202,19 @@ export function Pricing() {
             </div>
           </div>
         ) : pricingRows.length === 0 ? (
-          <div className="rounded-md border bg-card shadow-sm flex flex-col items-center justify-center py-16">
+          <Card className="flex flex-col items-center justify-center py-16">
             <div className="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center mb-4">
               <DollarSign className="h-7 w-7 text-primary" />
             </div>
             <h3 className="font-semibold text-lg mb-1">暂无定价配置</h3>
-            <p className="text-muted-foreground text-sm text-center max-w-sm mb-6">可调整倍率控制输入/输出成本，或者设置按次扣费。</p>
+            <p className="text-muted-foreground text-sm text-center max-w-sm mb-6">
+              可调整倍率控制输入/输出成本，或者设置按次扣费。
+            </p>
             <Button onClick={addRow}>
               <Plus className="h-4 w-4 mr-1" />
               添加模型
             </Button>
-          </div>
+          </Card>
         ) : (
           <div className="space-y-3">
             {/* Search */}
@@ -234,9 +231,12 @@ export function Pricing() {
             )}
 
             {/* Table */}
-            <div className="rounded-md border bg-card">
+            <Card>
               {/* Header */}
-              <div className="grid gap-2 px-4 py-2.5 border-b bg-muted/30" style={{ gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr 40px' }}>
+              <div
+                className="grid gap-2 px-4 py-2.5 border-b bg-muted/30"
+                style={{ gridTemplateColumns: "2fr 1fr 1fr 1fr 1fr 40px" }}
+              >
                 <span className="text-xs font-medium text-muted-foreground">模型名称</span>
                 <span className="text-xs font-medium text-muted-foreground">输入倍率</span>
                 <span className="text-xs font-medium text-muted-foreground">输出倍率</span>
@@ -248,10 +248,14 @@ export function Pricing() {
               {/* Rows */}
               <div className="divide-y">
                 {filteredRows.map((row) => (
-                  <div key={row._i} className="grid gap-2 px-4 py-2 items-center hover:bg-muted/20 transition-colors" style={{ gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr 40px' }}>
+                  <div
+                    key={row._i}
+                    className="grid gap-2 px-4 py-2 items-center hover:bg-muted/20 transition-colors"
+                    style={{ gridTemplateColumns: "2fr 1fr 1fr 1fr 1fr 40px" }}
+                  >
                     <AutoCompleteInput
                       value={row.model}
-                      onChange={(value) => updateRow(row._i, 'model', value)}
+                      onChange={(value) => updateRow(row._i, "model", value)}
                       placeholder="模型名称"
                       inputClassName="font-mono text-sm h-8"
                       options={pricingModelOptions}
@@ -260,7 +264,7 @@ export function Pricing() {
                     <Input
                       type="number"
                       value={row.input}
-                      onChange={(e) => updateRow(row._i, 'input', parseFloat(e.target.value) || 0)}
+                      onChange={(e) => updateRow(row._i, "input", parseFloat(e.target.value) || 0)}
                       step="0.001"
                       min="0"
                       className="font-mono text-sm h-8"
@@ -268,7 +272,7 @@ export function Pricing() {
                     <Input
                       type="number"
                       value={row.output}
-                      onChange={(e) => updateRow(row._i, 'output', parseFloat(e.target.value) || 0)}
+                      onChange={(e) => updateRow(row._i, "output", parseFloat(e.target.value) || 0)}
                       step="0.001"
                       min="0"
                       className="font-mono text-sm h-8"
@@ -276,7 +280,7 @@ export function Pricing() {
                     <Input
                       type="number"
                       value={row.cache}
-                      onChange={(e) => updateRow(row._i, 'cache', parseFloat(e.target.value) || 0)}
+                      onChange={(e) => updateRow(row._i, "cache", parseFloat(e.target.value) || 0)}
                       step="0.001"
                       min="0"
                       className="font-mono text-sm h-8"
@@ -284,7 +288,7 @@ export function Pricing() {
                     <Input
                       type="number"
                       value={row.request}
-                      onChange={(e) => updateRow(row._i, 'request', parseFloat(e.target.value) || 0)}
+                      onChange={(e) => updateRow(row._i, "request", parseFloat(e.target.value) || 0)}
                       step="0.001"
                       min="0"
                       className="font-mono text-sm h-8"
@@ -303,11 +307,9 @@ export function Pricing() {
               </div>
 
               {filteredRows.length === 0 && searchQuery && (
-                <div className="py-8 text-center text-sm text-muted-foreground">
-                  没有匹配的模型
-                </div>
+                <div className="py-8 text-center text-sm text-muted-foreground">没有匹配的模型</div>
               )}
-            </div>
+            </Card>
 
             {/* Add */}
             <button
@@ -338,5 +340,5 @@ export function Pricing() {
         </div>
       )}
     </PageContainer>
-  )
+  );
 }

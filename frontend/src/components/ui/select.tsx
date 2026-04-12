@@ -18,7 +18,7 @@ interface SelectOption {
 }
 
 const TRIGGER_BASE_CLASS =
-  'group relative flex h-10 w-full items-center rounded-md border border-input bg-transparent px-3 py-2 pr-10 text-sm text-foreground shadow-sm outline-none transition-all duration-200 hover:border-muted-foreground/30 focus-visible:border-primary/50 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50'
+  'group relative flex h-10 w-full items-center rounded-md border border-input bg-transparent px-3 py-2 pr-10 text-sm text-foreground transition-all duration-200 hover:border-muted-foreground/30 focus-visible:border-primary/50 disabled:cursor-not-allowed disabled:opacity-50'
 
 const CONTENT_BASE_CLASS =
   'absolute z-50 mt-1 w-full overflow-hidden rounded-md border border-border bg-popover text-popover-foreground shadow-lg'

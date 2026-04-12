@@ -1245,7 +1245,7 @@ export function Channels({ createMode = false, editRoute = false }: { createMode
                     </div>
                     <div className="">
                       <Label className="text-sm">渠道状态</Label>
-                      <div className="h-10 flex items-center gap-3 mb-2 rounded-md px-3 border border-input shadow-sm">
+                      <div className="h-10 flex items-center gap-3 mb-2 rounded-md px-3 border border-input hover:border-muted-foreground/30">
                         <span
                           className={cn(
                             "text-sm font-medium",
