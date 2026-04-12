@@ -207,7 +207,7 @@ export function Pricing() {
             </div>
           </div>
         ) : pricingRows.length === 0 ? (
-          <div className="rounded-xl border bg-card shadow-sm flex flex-col items-center justify-center py-16">
+          <div className="rounded-md border bg-card shadow-sm flex flex-col items-center justify-center py-16">
             <div className="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center mb-4">
               <DollarSign className="h-7 w-7 text-primary" />
             </div>
@@ -234,7 +234,7 @@ export function Pricing() {
             )}
 
             {/* Table */}
-            <div className="rounded-xl border bg-card">
+            <div className="rounded-md border bg-card">
               {/* Header */}
               <div className="grid gap-2 px-4 py-2.5 border-b bg-muted/30" style={{ gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr 40px' }}>
                 <span className="text-xs font-medium text-muted-foreground">模型名称</span>
