@@ -56,6 +56,8 @@ const RESULT_OPTIONS: Array<{ value: "all" | "success" | "failure"; label: strin
 
 const PAGINATION_WINDOW_SIZE = 5;
 const USAGE_LOGS_PAGE_CACHE_KEY = "usage-logs:page";
+const ROLLING_USAGE_LOG_WINDOW_MS = 24 * 60 * 60 * 1000;
+const ROLLING_USAGE_LOG_WINDOW_TOLERANCE_MS = 15 * 60 * 1000;
 
 const toDateTimeLocalValue = (date: Date): string => {
   const offset = date.getTimezoneOffset() * 60_000;
@@ -140,6 +142,41 @@ const isSameUsageLogFilterState = (left: UsageLogFilterState, right: UsageLogFil
   );
 };
 
+const isSameUsageLogFilterIntent = (left: UsageLogFilterState, right: UsageLogFilterState): boolean => {
+  return (
+    left.dimension === right.dimension &&
+    left.keyword === right.keyword &&
+    left.result === right.result
+  );
+};
+
+const parseLocalDateTimeValue = (value: string): number | null => {
+  if (!value) {
+    return null;
+  }
+
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date.getTime();
+};
+
+const isRollingLatest24hSnapshot = (snapshot: UsageLogPageCacheSnapshot, updatedAt: number | undefined): boolean => {
+  if (!updatedAt) {
+    return false;
+  }
+
+  const startTime = parseLocalDateTimeValue(snapshot.appliedFilters.start);
+  const endTime = parseLocalDateTimeValue(snapshot.appliedFilters.end);
+  if (startTime === null || endTime === null) {
+    return false;
+  }
+
+  const duration = endTime - startTime;
+  return (
+    Math.abs(duration - ROLLING_USAGE_LOG_WINDOW_MS) <= ROLLING_USAGE_LOG_WINDOW_TOLERANCE_MS &&
+    Math.abs(updatedAt - endTime) <= ROLLING_USAGE_LOG_WINDOW_TOLERANCE_MS
+  );
+};
+
 const ClientSummary = ({ item }: { item: AnalyticsEventItem }) => {
   const locationParts = [item.country, item.region, item.city].filter(Boolean);
 
@@ -192,6 +229,14 @@ export function UsageLogs() {
     isSameUsageLogFilterState(cachedLogsSnapshot.data.appliedFilters, appliedFilters)
       ? cachedLogsSnapshot.data.data
       : undefined;
+  const placeholderLogsData =
+    !initialLogsData &&
+    cachedLogsSnapshot?.data &&
+    cachedLogsSnapshot.data.currentPage === currentPage &&
+    isSameUsageLogFilterIntent(cachedLogsSnapshot.data.appliedFilters, appliedFilters) &&
+    isRollingLatest24hSnapshot(cachedLogsSnapshot.data, cachedLogsSnapshot.updatedAt)
+      ? cachedLogsSnapshot.data.data
+      : undefined;
 
   const logsQuery = useQuery({
     queryKey: ["usage-logs", appliedFilters, currentPage],
@@ -208,6 +253,7 @@ export function UsageLogs() {
     },
     initialData: initialLogsData,
     initialDataUpdatedAt: initialLogsData ? cachedLogsSnapshot?.updatedAt : undefined,
+    placeholderData: placeholderLogsData,
   });
 
   const activePage = logsQuery.data?.page ?? currentPage;
