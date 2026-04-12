@@ -1,7 +1,7 @@
 import { startTransition, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "@/api/client";
-import { AnalyticsEventItem, UsageLogFilterDimension, UsageLogFilters, UsageLogSearchData } from "@/types";
+import { AnalyticsEventItem, AnalyticsRange, UsageLogFilterDimension, UsageLogFilters, UsageLogSearchData } from "@/types";
 import { PageContainer } from "@/components/ui/page-container";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -14,8 +14,7 @@ import { cn, formatCurrency, parseUtcTimestamp } from "@/lib/utils";
 import { Eye, RefreshCw, RotateCcw, Search } from "lucide-react";
 
 type UsageLogFilterState = {
-  start: string;
-  end: string;
+  range: AnalyticsRange;
   dimension: UsageLogFilterDimension;
   keyword: string;
   result: "all" | "success" | "failure";
@@ -49,28 +48,34 @@ const FILTER_DIMENSIONS: Array<{ value: UsageLogFilterDimension; label: string }
 ];
 
 const RESULT_OPTIONS: Array<{ value: "all" | "success" | "failure"; label: string }> = [
-  { value: "all", label: "全部结果" },
+  { value: "all", label: "全部状态" },
   { value: "success", label: "仅成功" },
   { value: "failure", label: "仅失败" },
 ];
 
-const PAGINATION_WINDOW_SIZE = 5;
-const USAGE_LOGS_PAGE_CACHE_KEY = "usage-logs:page";
-const ROLLING_USAGE_LOG_WINDOW_MS = 24 * 60 * 60 * 1000;
-const ROLLING_USAGE_LOG_WINDOW_TOLERANCE_MS = 15 * 60 * 1000;
+const RANGE_OPTIONS: Array<{ value: AnalyticsRange; label: string }> = [
+  { value: "24h", label: "24 小时" },
+  { value: "7d", label: "7 天" },
+  { value: "30d", label: "30 天" },
+  { value: "90d", label: "90 天" },
+];
 
-const toDateTimeLocalValue = (date: Date): string => {
-  const offset = date.getTimezoneOffset() * 60_000;
-  return new Date(date.getTime() - offset).toISOString().slice(0, 16);
+const PAGINATION_WINDOW_SIZE = 5;
+const USAGE_LOGS_PAGE_CACHE_KEY = "usage-logs:page:v2";
+const USAGE_LOG_RANGE_DURATION_MS: Record<AnalyticsRange, number> = {
+  "24h": 24 * 60 * 60 * 1000,
+  "7d": 7 * 24 * 60 * 60 * 1000,
+  "30d": 30 * 24 * 60 * 60 * 1000,
+  "90d": 90 * 24 * 60 * 60 * 1000,
 };
 
-const createFilterPreset = (hoursBack: number): UsageLogFilterState => {
-  const end = new Date();
-  const start = new Date(end.getTime() - hoursBack * 60 * 60 * 1000);
+const isAnalyticsRange = (value: unknown): value is AnalyticsRange => {
+  return RANGE_OPTIONS.some((option) => option.value === value);
+};
 
+const createFilterPreset = (range: AnalyticsRange): UsageLogFilterState => {
   return {
-    start: toDateTimeLocalValue(start),
-    end: toDateTimeLocalValue(end),
+    range,
     dimension: "token",
     keyword: "",
     result: "all",
@@ -79,14 +84,13 @@ const createFilterPreset = (hoursBack: number): UsageLogFilterState => {
 
 const hydrateUsageLogFilters = (
   filters: UsageLogFilterState | undefined,
-  latestWindow: UsageLogFilterState,
+  fallback: UsageLogFilterState,
 ): UsageLogFilterState => {
   return {
-    start: latestWindow.start,
-    end: latestWindow.end,
-    dimension: filters?.dimension ?? latestWindow.dimension,
-    keyword: filters?.keyword ?? latestWindow.keyword,
-    result: filters?.result ?? latestWindow.result,
+    range: isAnalyticsRange(filters?.range) ? filters.range : fallback.range,
+    dimension: filters?.dimension ?? fallback.dimension,
+    keyword: filters?.keyword ?? fallback.keyword,
+    result: filters?.result ?? fallback.result,
   };
 };
 
@@ -121,10 +125,19 @@ const formatCompactNumber = (value: number): string => {
   }).format(value);
 };
 
+const getUsageLogWindow = (range: AnalyticsRange): { start: Date; end: Date } => {
+  const end = new Date();
+  const start = new Date(end.getTime() - USAGE_LOG_RANGE_DURATION_MS[range]);
+
+  return { start, end };
+};
+
 const buildSearchParams = (filters: UsageLogFilterState, page: number): UsageLogFilters => {
+  const { start, end } = getUsageLogWindow(filters.range);
+
   return {
-    start: filters.start ? new Date(filters.start).toISOString() : undefined,
-    end: filters.end ? new Date(filters.end).toISOString() : undefined,
+    start: start.toISOString(),
+    end: end.toISOString(),
     dimension: filters.dimension,
     keyword: filters.keyword.trim() || undefined,
     result: filters.result,
@@ -134,46 +147,10 @@ const buildSearchParams = (filters: UsageLogFilterState, page: number): UsageLog
 
 const isSameUsageLogFilterState = (left: UsageLogFilterState, right: UsageLogFilterState): boolean => {
   return (
-    left.start === right.start &&
-    left.end === right.end &&
+    left.range === right.range &&
     left.dimension === right.dimension &&
     left.keyword === right.keyword &&
     left.result === right.result
-  );
-};
-
-const isSameUsageLogFilterIntent = (left: UsageLogFilterState, right: UsageLogFilterState): boolean => {
-  return (
-    left.dimension === right.dimension &&
-    left.keyword === right.keyword &&
-    left.result === right.result
-  );
-};
-
-const parseLocalDateTimeValue = (value: string): number | null => {
-  if (!value) {
-    return null;
-  }
-
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? null : date.getTime();
-};
-
-const isRollingLatest24hSnapshot = (snapshot: UsageLogPageCacheSnapshot, updatedAt: number | undefined): boolean => {
-  if (!updatedAt) {
-    return false;
-  }
-
-  const startTime = parseLocalDateTimeValue(snapshot.appliedFilters.start);
-  const endTime = parseLocalDateTimeValue(snapshot.appliedFilters.end);
-  if (startTime === null || endTime === null) {
-    return false;
-  }
-
-  const duration = endTime - startTime;
-  return (
-    Math.abs(duration - ROLLING_USAGE_LOG_WINDOW_MS) <= ROLLING_USAGE_LOG_WINDOW_TOLERANCE_MS &&
-    Math.abs(updatedAt - endTime) <= ROLLING_USAGE_LOG_WINDOW_TOLERANCE_MS
   );
 };
 
@@ -205,7 +182,7 @@ const DetailField = ({ label, value, mono = false }: { label: string; value: str
 };
 
 export function UsageLogs() {
-  const defaultFilters = useMemo(() => createFilterPreset(24), []);
+  const defaultFilters = useMemo(() => createFilterPreset("24h"), []);
   const cachedLogsSnapshot = useMemo(() => readScopedCache<UsageLogPageCacheSnapshot>(USAGE_LOGS_PAGE_CACHE_KEY), []);
   const initialDraftFilters = useMemo(
     () => hydrateUsageLogFilters(cachedLogsSnapshot?.data.draftFilters, defaultFilters),
@@ -221,20 +198,12 @@ export function UsageLogs() {
   const [appliedFilters, setAppliedFilters] = useState<UsageLogFilterState>(
     () => initialAppliedFilters,
   );
-  const [currentPage, setCurrentPage] = useState(1);
+  const [currentPage, setCurrentPage] = useState(() => cachedLogsSnapshot?.data.currentPage ?? 1);
   const [selectedItem, setSelectedItem] = useState<AnalyticsEventItem | null>(null);
   const initialLogsData =
     cachedLogsSnapshot?.data &&
     cachedLogsSnapshot.data.currentPage === currentPage &&
     isSameUsageLogFilterState(cachedLogsSnapshot.data.appliedFilters, appliedFilters)
-      ? cachedLogsSnapshot.data.data
-      : undefined;
-  const placeholderLogsData =
-    !initialLogsData &&
-    cachedLogsSnapshot?.data &&
-    cachedLogsSnapshot.data.currentPage === currentPage &&
-    isSameUsageLogFilterIntent(cachedLogsSnapshot.data.appliedFilters, appliedFilters) &&
-    isRollingLatest24hSnapshot(cachedLogsSnapshot.data, cachedLogsSnapshot.updatedAt)
       ? cachedLogsSnapshot.data.data
       : undefined;
 
@@ -253,7 +222,6 @@ export function UsageLogs() {
     },
     initialData: initialLogsData,
     initialDataUpdatedAt: initialLogsData ? cachedLogsSnapshot?.updatedAt : undefined,
-    placeholderData: placeholderLogsData,
   });
 
   const activePage = logsQuery.data?.page ?? currentPage;
@@ -276,16 +244,6 @@ export function UsageLogs() {
     return Array.from({ length: end - start + 1 }, (_, index) => start + index);
   }, [activePage, totalPages]);
 
-  const applyPreset = (hoursBack: number) => {
-    const preset = createFilterPreset(hoursBack);
-    setDraftFilters((current) => ({
-      ...preset,
-      dimension: current.dimension,
-      keyword: current.keyword,
-      result: current.result,
-    }));
-  };
-
   const handleSearch = () => {
     startTransition(() => {
       setCurrentPage(1);
@@ -294,7 +252,7 @@ export function UsageLogs() {
   };
 
   const handleReset = () => {
-    const preset = createFilterPreset(24);
+    const preset = createFilterPreset("24h");
     setDraftFilters(preset);
     startTransition(() => {
       setCurrentPage(1);
@@ -315,7 +273,7 @@ export function UsageLogs() {
   return (
     <PageContainer
       title="使用日志"
-      description="按自定义起止时间与维度筛选最近可读取的使用记录，重点用于排查异常设备、失败请求和上游问题。"
+      description="按最近时间范围与维度筛选可读取的使用记录，重点用于排查异常设备、失败请求和上游问题。"
       actions={
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" onClick={() => logsQuery.refetch()} disabled={logsQuery.isFetching}>
@@ -354,24 +312,24 @@ export function UsageLogs() {
                 <AlertDescription>{logsQuery.data.compatibilityWarning}</AlertDescription>
               </Alert>
             )}
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 xl:grid-cols-5">
               <div>
-                <label className="mb-1.5 block text-xs font-medium text-muted-foreground">开始时间</label>
-                <Input
-                  className="block"
-                  type="datetime-local"
-                  value={draftFilters.start}
-                  onChange={(event) => setDraftFilters((current) => ({ ...current, start: event.target.value }))}
-                />
-              </div>
-              <div>
-                <label className="mb-1.5 block text-xs font-medium text-muted-foreground">结束时间</label>
-                <Input
-                  className="block"
-                  type="datetime-local"
-                  value={draftFilters.end}
-                  onChange={(event) => setDraftFilters((current) => ({ ...current, end: event.target.value }))}
-                />
+                <label className="mb-1.5 block text-xs font-medium text-muted-foreground">时间范围</label>
+                <Select
+                  value={draftFilters.range}
+                  onChange={(event) =>
+                    setDraftFilters((current) => ({
+                      ...current,
+                      range: event.target.value as AnalyticsRange,
+                    }))
+                  }
+                >
+                  {RANGE_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </Select>
               </div>
               <div>
                 <label className="mb-1.5 block text-xs font-medium text-muted-foreground">查询维度</label>
@@ -392,15 +350,7 @@ export function UsageLogs() {
                 </Select>
               </div>
               <div>
-                <label className="mb-1.5 block text-xs font-medium text-muted-foreground">关键字</label>
-                <Input
-                  value={draftFilters.keyword}
-                  onChange={(event) => setDraftFilters((current) => ({ ...current, keyword: event.target.value }))}
-                  placeholder="支持 ILIKE 模糊匹配"
-                />
-              </div>
-              <div>
-                <label className="mb-1.5 block text-xs font-medium text-muted-foreground">结果过滤</label>
+                <label className="mb-1.5 block text-xs font-medium text-muted-foreground">查询状态</label>
                 <Select
                   value={draftFilters.result}
                   onChange={(event) =>
@@ -417,16 +367,23 @@ export function UsageLogs() {
                   ))}
                 </Select>
               </div>
+              <div>
+                <label className="mb-1.5 block text-xs font-medium text-muted-foreground">关键字</label>
+                <Input
+                  value={draftFilters.keyword}
+                  onChange={(event) => setDraftFilters((current) => ({ ...current, keyword: event.target.value }))}
+                  placeholder="支持 ILIKE 模糊匹配"
+                />
+              </div>
 
-              <div className="flex flex-wrap items-end gap-2 sm:col-end-4 xl:col-end-5">
+              <div className="flex flex-wrap items-end gap-2 sm:col-end-4 xl:col-end-6">
                 <div className="flex-1"></div>
                 <Button onClick={handleSearch}>
                   <Search className="h-4 w-4" />
-                  查询日志
+                  查询
                 </Button>
                 <Button variant="outline" onClick={handleReset}>
                   <RotateCcw className="h-4 w-4" />
-                  重置
                 </Button>
               </div>
             </div>
@@ -561,7 +518,7 @@ export function UsageLogs() {
             ) : (
               <div className="rounded-xl border border-dashed bg-muted/20 px-4 py-14 text-center">
                 <p className="text-sm font-medium">没有匹配的日志记录</p>
-                <p className="mt-1 text-sm text-muted-foreground">调整起止时间、维度或关键字后重试。</p>
+                <p className="mt-1 text-sm text-muted-foreground">调整时间范围、维度或关键字后重试。</p>
               </div>
             )}
           </CardContent>
