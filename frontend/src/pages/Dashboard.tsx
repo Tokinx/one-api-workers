@@ -16,7 +16,7 @@ const features = [
   {
     icon: Gauge,
     title: "负载均衡",
-    description: "支持按权重多渠道/多密钥随机分配请求，自动重试/轮换，确保高可用性。",
+    description: "支持按权重多渠道路由、单渠道多密钥重试/轮换，以及跨渠道 fallback。",
     gradient: "from-emerald-500/10 to-teal-500/10",
     iconBg: "from-emerald-500 to-teal-500",
     delay: "50ms",

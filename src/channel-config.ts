@@ -5,8 +5,8 @@ export const DEFAULT_CHANNEL_WEIGHT = 0;
 export const MAX_CHANNEL_WEIGHT = 5;
 export const DEFAULT_CHANNEL_MODEL_ENABLED = true;
 export const DEFAULT_CLAUDE_API_VERSION = "2023-06-01";
-export const MAX_RETRIES_PER_KEY = 3;
-export const MAX_ROTATION_ATTEMPTS = 3;
+export const MAX_CHANNEL_RETRIES = 3;
+export const MAX_CHANNEL_FALLBACKS = 3;
 
 export type NormalizedChannelConfig = Omit<ChannelConfig, "enabled" | "weight" | "api_keys" | "auto_retry" | "auto_rotate" | "models" | "supported_models" | "deployment_mapper"> & {
     enabled: boolean;

@@ -11,12 +11,33 @@ import {
     writeUsageSuccessEvent,
 } from "../../analytics/usage-logger"
 
+export type ResolvedChannelCandidate = {
+    key: string
+    config: ChannelConfig
+    mapping: ChannelModelMapping
+}
+
 export type ChannelResolution = {
-    channel: { key: string; config: ChannelConfig }
+    channels: ResolvedChannelCandidate[]
+    initialChannel: ResolvedChannelCandidate
     requestBody: any
     saveUsage: (usage: Usage) => Promise<void>
     logFailure: (errorCode: string, errorSummary?: string) => void
     trackingState: RequestTrackingState
+    setActiveChannel: (channel: ResolvedChannelCandidate) => void
+}
+
+export const pickHighestPriorityChannel = (
+    channels: ResolvedChannelCandidate[]
+): ResolvedChannelCandidate => {
+    const maxWeight = channels.reduce((highest, current) => {
+        return Math.max(highest, current.config.weight ?? 0);
+    }, 0);
+    const highestPriorityChannels = channels.filter((channel) => {
+        return (channel.config.weight ?? 0) === maxWeight;
+    });
+    const randomIndex = Math.floor(Math.random() * highestPriorityChannels.length);
+    return highestPriorityChannels[randomIndex];
 }
 
 export const resolveChannel = async (
@@ -59,7 +80,7 @@ export const resolveChannel = async (
     const policy = getRoutePolicy(routeId);
     const allowedTypes = policy.allowedTypes;
 
-    const availableChannels: Array<{ key: string, config: ChannelConfig, mapping: ChannelModelMapping }> = [];
+    const availableChannels: ResolvedChannelCandidate[] = [];
     let hasDisabledMatchingChannel = false;
 
     for (const row of channelsResult.results) {
@@ -103,16 +124,7 @@ export const resolveChannel = async (
         return c.text(`Model not supported: ${requestedModel}. Please configure models.`, 400);
     }
 
-    const maxWeight = availableChannels.reduce((highest, current) => {
-        return Math.max(highest, current.config.weight ?? 0);
-    }, 0);
-    const highestPriorityChannels = availableChannels.filter((channel) => {
-        return (channel.config.weight ?? 0) === maxWeight;
-    });
-    const randomIndex = Math.floor(Math.random() * highestPriorityChannels.length);
-    const selectedChannel = highestPriorityChannels[randomIndex];
-    const targetChannelKey = selectedChannel.key;
-    const targetChannelConfig = selectedChannel.config;
+    const selectedChannel = pickHighestPriorityChannel(availableChannels);
     const trackingState: RequestTrackingState = {
         retryCount: 0,
     };
@@ -124,8 +136,8 @@ export const resolveChannel = async (
         routeId,
         tokenHash,
         tokenName,
-        channelKey: targetChannelKey,
-        providerType: targetChannelConfig.type || "unknown",
+        channelKey: selectedChannel.key,
+        providerType: selectedChannel.config.type || "unknown",
         requestedModel,
         upstreamModel: selectedChannel.mapping.id,
         streamMode: requestBody.stream ? "stream" as const : "sync" as const,
@@ -142,12 +154,14 @@ export const resolveChannel = async (
         trackingState,
     };
     let usageLogState: "idle" | "processing" | "done" = "idle";
+    let activeChannel = selectedChannel;
 
-    requestBody.model = selectedChannel.mapping.id;
-
-    if (!targetChannelConfig.type) {
-        return c.text("Channel type invalid", 400);
-    }
+    const setActiveChannel = (channel: ResolvedChannelCandidate) => {
+        activeChannel = channel;
+        usageContext.channelKey = channel.key;
+        usageContext.providerType = channel.config.type || "unknown";
+        usageContext.upstreamModel = channel.mapping.id;
+    };
 
     const saveUsage = async (usage: Usage) => {
         if (usageLogState !== "idle") {
@@ -160,8 +174,8 @@ export const resolveChannel = async (
                 c,
                 apiKey,
                 requestedModel,
-                targetChannelKey,
-                targetChannelConfig,
+                activeChannel.key,
+                activeChannel.config,
                 usage
             );
             writeUsageSuccessEvent(c, usageContext, usage, costResult);
@@ -181,10 +195,12 @@ export const resolveChannel = async (
     };
 
     return {
-        channel: { key: targetChannelKey, config: targetChannelConfig },
+        channels: availableChannels,
+        initialChannel: selectedChannel,
         requestBody,
         saveUsage,
         logFailure,
         trackingState,
+        setActiveChannel,
     };
 }

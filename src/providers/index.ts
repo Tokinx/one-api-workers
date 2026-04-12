@@ -5,8 +5,7 @@ import { z } from "zod";
 import db from "../db"
 import { resolveRouteId } from "./shared/route-policy"
 import { resolveChannel } from "./shared/channel-resolver"
-import { getProvider } from "./shared/provider-registry"
-import { executeWithChannelKeys } from "./shared/upstream-retry"
+import { executeWithFallbackChannels } from "./shared/upstream-retry"
 import { ModelsEndpoint } from "./models"
 
 export const api = fromHono(new Hono<HonoCustomType>())
@@ -42,21 +41,17 @@ class UnifiedProxyEndpoint extends OpenAPIRoute {
         const result = await resolveChannel(c, routeId)
         if (result instanceof Response) return result
 
-        const { channel, requestBody, saveUsage, logFailure, trackingState } = result
+        const { channels, initialChannel, requestBody, saveUsage, logFailure, trackingState, setActiveChannel } = result
 
-        const provider = getProvider(channel.config.type || "")
-        if (!provider) {
-            return c.text("Channel type not supported", 400)
-        }
-
-        return executeWithChannelKeys(
+        return executeWithFallbackChannels(
             c,
-            channel.config,
+            channels,
+            initialChannel,
             requestBody,
             saveUsage,
             logFailure,
             trackingState,
-            provider
+            setActiveChannel,
         )
     }
 }

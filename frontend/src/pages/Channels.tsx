@@ -1319,7 +1319,7 @@ export function Channels({ createMode = false, editRoute = false }: { createMode
                         />
                         <div>
                           <div className="text-sm font-medium">自动重试</div>
-                          <p className="mt-1 text-xs text-muted-foreground">单个密钥遇可重试错误时，自动重试 x3</p>
+                          <p className="mt-1 text-xs text-muted-foreground">渠道遇可重试错误时，最多自动重试 3 次</p>
                         </div>
                       </label>
                       <label className="flex items-start gap-3 p-4 rounded-lg border bg-muted/30 cursor-pointer">
@@ -1330,7 +1330,7 @@ export function Channels({ createMode = false, editRoute = false }: { createMode
                         />
                         <div>
                           <div className="text-sm font-medium">自动轮换</div>
-                          <p className="mt-1 text-xs text-muted-foreground">单个密钥多次失败后，自动轮换密钥 x3</p>
+                          <p className="mt-1 text-xs text-muted-foreground">重试时随机切换同渠道其他密钥；关闭后始终重试当前密钥</p>
                         </div>
                       </label>
                     </div>
