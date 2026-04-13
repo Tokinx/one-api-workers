@@ -24,6 +24,32 @@ CREATE TABLE IF NOT EXISTS settings (
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
+CREATE TABLE IF NOT EXISTS admin_login_challenge (
+    id TEXT PRIMARY KEY,
+    code_hash TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    attempts INTEGER DEFAULT 0,
+    max_attempts INTEGER DEFAULT 5,
+    request_ip TEXT DEFAULT '',
+    request_country TEXT DEFAULT '',
+    request_region TEXT DEFAULT '',
+    request_city TEXT DEFAULT '',
+    request_colo TEXT DEFAULT '',
+    request_timezone TEXT DEFAULT '',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+CREATE TABLE IF NOT EXISTS admin_session (
+    token_hash TEXT PRIMARY KEY,
+    expires_at TEXT NOT NULL,
+    last_used_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_admin_login_challenge_expires_at
+    ON admin_login_challenge (expires_at);
+CREATE INDEX IF NOT EXISTS idx_admin_session_expires_at
+    ON admin_session (expires_at);
 `
 
 let dbReadyPromise: Promise<void> | null = null;

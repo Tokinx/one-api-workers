@@ -120,6 +120,21 @@ type BillingConfig = {
     displayDecimals: number;
 }
 
+type AdminSecurityConfig = {
+    enabled: boolean;
+    telegramBotToken: string;
+    telegramChatId: string;
+}
+
+type ApiDocsConfig = {
+    enabled: boolean;
+}
+
+type SystemConfig = BillingConfig & {
+    adminSecurity: AdminSecurityConfig;
+    apiDocs: ApiDocsConfig;
+}
+
 type ApiTokenData = {
     name: string;
     channel_keys: string[];
@@ -130,4 +145,24 @@ type RequestTrackingState = {
     retryCount: number;
     upstreamStatus?: number;
     errorSummary?: string;
+}
+
+type AdminLoginChallengeRow = BaseDbRow & {
+    id: string;
+    code_hash: string;
+    expires_at: string;
+    attempts: number;
+    max_attempts: number;
+    request_ip: string;
+    request_country: string;
+    request_region: string;
+    request_city: string;
+    request_colo: string;
+    request_timezone: string;
+}
+
+type AdminSessionRow = BaseDbRow & {
+    token_hash: string;
+    expires_at: string;
+    last_used_at: string;
 }

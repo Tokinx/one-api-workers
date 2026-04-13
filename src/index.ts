@@ -4,6 +4,8 @@ import { cors } from 'hono/cors';
 import { api as providerApi } from './providers'
 import { api as adminApi } from './admin'
 import { fromHono } from 'chanfana';
+import db from './db';
+import { getSystemConfig } from './system-config';
 
 const FRONTEND_ENTRY = '/'
 const FRONTEND_STATIC_PATHS = new Set([
@@ -22,6 +24,11 @@ const FRONTEND_STATIC_PREFIXES = [
     '/src/',
 ]
 const LOCAL_DEV_HOSTNAMES = new Set(['0.0.0.0', '127.0.0.1', '::1', 'localhost'])
+const API_DOC_ROUTE_PATHS = new Set([
+    '/api/docs',
+    '/api/redocs',
+    '/api/openapi.json',
+])
 type AppContext = Context<HonoCustomType>
 
 function isApiRequest(pathname: string): boolean {
@@ -95,6 +102,15 @@ openapi.use('/*', cors());
 
 app.use('*', async (c, next) => {
     const requestUrl = new URL(c.req.url)
+
+    if (API_DOC_ROUTE_PATHS.has(requestUrl.pathname)) {
+        await db.ensureReady(c);
+
+        const systemConfig = await getSystemConfig(c);
+        if (!systemConfig.apiDocs.enabled) {
+            return c.notFound();
+        }
+    }
 
     if (isApiRequest(requestUrl.pathname)) {
         await next()

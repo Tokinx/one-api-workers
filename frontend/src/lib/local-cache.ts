@@ -1,6 +1,7 @@
+import { getAdminCredentialScopeToken } from "@/lib/admin-auth";
+
 const CACHE_PREFIX = "one-api-cache";
 const CACHE_VERSION = 1;
-const ADMIN_TOKEN_KEY = "adminToken";
 
 export interface LocalCacheEntry<T> {
   version: number;
@@ -15,7 +16,7 @@ const getAdminTokenScope = (): string => {
     return "server";
   }
 
-  const adminToken = window.localStorage.getItem(ADMIN_TOKEN_KEY) || "anonymous";
+  const adminToken = getAdminCredentialScopeToken();
   let hash = 2166136261;
 
   for (let index = 0; index < adminToken.length; index += 1) {

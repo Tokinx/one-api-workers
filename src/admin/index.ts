@@ -15,33 +15,76 @@ import {
     BillingConfigGetEndpoint, BillingConfigUpdateEndpoint
 } from "./billing_api"
 import {
+    SystemConfigGetEndpoint,
+    SystemConfigUpdateEndpoint,
+    TelegramTestMessageEndpoint,
+} from "./system_api"
+import {
+    AdminLoginStartEndpoint,
+    AdminLoginVerifyEndpoint,
+    AdminLogoutEndpoint,
+} from "./auth_api"
+import {
     AnalyticsOverviewEndpoint,
     AnalyticsTrendEndpoint,
     AnalyticsBreakdownEndpoint,
     AnalyticsEventsEndpoint,
     UsageLogSearchEndpoint,
 } from "./analytics_api"
+import { getSystemConfig, isTelegramSecurityEnabled } from "../system-config"
+import { getAdminSessionHeaderName, validateAdminSession } from "./auth_shared"
 
 const app = new Hono<HonoCustomType>()
 export const api = fromHono(app)
 
-// Authentication Middleware - using environment variable
-app.use('/api/admin/*', async (c, next) => {
-    const token = c.req.header('x-admin-token');
-    const adminToken = c.env.ADMIN_TOKEN;
-
-    if (!token || !adminToken || token !== adminToken) {
-        return c.text("Unauthorized", 401);
-    }
-    await next();
-});
+const PUBLIC_AUTH_ROUTES = new Set([
+    "/api/admin/auth/login",
+    "/api/admin/auth/verify",
+]);
 
 app.use('/api/admin/*', async (c, next) => {
     await db.ensureReady(c);
     await next();
 });
 
+// Authentication Middleware - using environment variable or admin session
+app.use('/api/admin/*', async (c, next) => {
+    if (PUBLIC_AUTH_ROUTES.has(c.req.path)) {
+        await next();
+        return;
+    }
+
+    const sessionToken = c.req.header(getAdminSessionHeaderName());
+
+    if (await validateAdminSession(c, sessionToken)) {
+        await next();
+        return;
+    }
+
+    const systemConfig = await getSystemConfig(c);
+    const securityEnabled = isTelegramSecurityEnabled(systemConfig.adminSecurity);
+    const token = c.req.header('x-admin-token');
+    const adminToken = c.env.ADMIN_TOKEN;
+
+    if (!securityEnabled && token && adminToken && token === adminToken) {
+        await next();
+        return;
+    }
+
+    return c.text(
+        securityEnabled
+            ? "Telegram 登录验证已开启，请先完成验证码登录"
+            : "Unauthorized",
+        401
+    );
+});
+
 api.post("/api/admin/db_initialize", DBInitializeEndpoint)
+
+// Authentication routes
+api.post("/api/admin/auth/login", AdminLoginStartEndpoint)
+api.post("/api/admin/auth/verify", AdminLoginVerifyEndpoint)
+api.post("/api/admin/auth/logout", AdminLogoutEndpoint)
 
 api.get("/api/admin/channel", ChannelGetEndpoint)
 api.post("/api/admin/channel/:key", ChannelUpsertEndpoint)
@@ -59,6 +102,9 @@ api.get("/api/admin/pricing", PricingGetEndpoint)
 api.post("/api/admin/pricing", PricingUpdateEndpoint)
 api.get("/api/admin/billing/config", BillingConfigGetEndpoint)
 api.post("/api/admin/billing/config", BillingConfigUpdateEndpoint)
+api.get("/api/admin/system/config", SystemConfigGetEndpoint)
+api.post("/api/admin/system/config", SystemConfigUpdateEndpoint)
+api.post("/api/admin/system/telegram/test", TelegramTestMessageEndpoint)
 
 // Analytics management routes
 api.get("/api/admin/analytics/overview", AnalyticsOverviewEndpoint)

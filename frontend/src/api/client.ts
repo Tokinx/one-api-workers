@@ -9,9 +9,12 @@ import {
   AnalyticsBreakdownDimension,
   AnalyticsRange,
   BillingConfig,
+  SystemConfig,
+  AdminLoginResponse,
   UsageLogFilters,
   UsageLogSearchData,
 } from '@/types'
+import { clearAdminCredentials, getStoredAdminCredential } from '@/lib/admin-auth'
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || ''
 
@@ -29,6 +32,10 @@ export class ApiError extends Error {
 // 全局错误处理回调
 let onUnauthorized: (() => void) | null = null
 let onError: ((error: ApiError) => void) | null = null
+
+type RequestBehavior = {
+  skipUnauthorizedHandler?: boolean
+}
 
 export function setErrorHandlers(handlers: {
   onUnauthorized?: () => void
@@ -48,16 +55,16 @@ async function requestInterceptor(config: RequestInit): Promise<RequestInit> {
   }
 
   // 添加 admin token
-  const adminToken = localStorage.getItem('adminToken')
-  if (adminToken) {
-    headers.set('x-admin-token', adminToken)
+  const credential = getStoredAdminCredential()
+  if (credential) {
+    headers.set(credential.headerName, credential.token)
   }
 
   return { ...config, headers }
 }
 
 // 响应拦截器
-async function responseInterceptor(response: Response): Promise<any> {
+async function responseInterceptor(response: Response, behavior: RequestBehavior = {}): Promise<any> {
   if (!response.ok) {
     let errorMessage: string
 
@@ -84,10 +91,11 @@ async function responseInterceptor(response: Response): Promise<any> {
     // 处理特定状态码
     switch (response.status) {
       case 401:
-        // 未授权 - 清除 token 并触发回调
-        localStorage.removeItem('adminToken')
-        onUnauthorized?.()
-        error.message = '认证已过期，请重新登录'
+        if (!behavior.skipUnauthorizedHandler) {
+          clearAdminCredentials()
+          onUnauthorized?.()
+          error.message = '认证已过期，请重新登录'
+        }
         break
       case 403:
         error.message = '没有权限执行此操作'
@@ -148,13 +156,17 @@ function buildQueryString(params: Record<string, string | number | undefined>): 
 }
 
 // 统一请求方法
-async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+async function request<T>(
+  endpoint: string,
+  options: RequestInit = {},
+  behavior: RequestBehavior = {},
+): Promise<T> {
   const url = `${BASE_URL}${endpoint}`
 
   try {
     const config = await requestInterceptor(options)
     const response = await fetch(url, config)
-    return responseInterceptor(response)
+    return responseInterceptor(response, behavior)
   } catch (error) {
     // 处理网络错误
     if (error instanceof TypeError && error.message.includes('fetch')) {
@@ -228,6 +240,20 @@ export const apiClient = {
       body: JSON.stringify(config),
     }),
 
+  getSystemConfig: () => request<ApiResponse<SystemConfig>>('/api/admin/system/config', { method: 'GET' }),
+
+  saveSystemConfig: (config: SystemConfig) =>
+    request<ApiResponse<SystemConfig>>('/api/admin/system/config', {
+      method: 'POST',
+      body: JSON.stringify(config),
+    }),
+
+  sendTelegramTestMessage: (payload: Pick<SystemConfig['adminSecurity'], 'telegramBotToken' | 'telegramChatId'>) =>
+    request<ApiResponse<boolean>>('/api/admin/system/telegram/test', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+
   // Analytics APIs
   getAnalyticsOverview: (range: AnalyticsRange) =>
     request<ApiResponse<AnalyticsOverviewData>>(`/api/admin/analytics/overview?range=${encodeURIComponent(range)}`, { method: 'GET' }),
@@ -292,4 +318,27 @@ export const apiClient = {
 
   // Auth check
   checkAuth: () => request<ApiResponse>('/api/admin/channel', { method: 'GET' }),
+
+  startAdminLogin: (token: string) =>
+    request<ApiResponse<AdminLoginResponse>>('/api/admin/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ token }),
+    }, {
+      skipUnauthorizedHandler: true,
+    }),
+
+  verifyAdminLogin: (challengeId: string, code: string) =>
+    request<ApiResponse<AdminLoginResponse>>('/api/admin/auth/verify', {
+      method: 'POST',
+      body: JSON.stringify({ challengeId, code }),
+    }, {
+      skipUnauthorizedHandler: true,
+    }),
+
+  logoutAdmin: () =>
+    request<ApiResponse<boolean>>('/api/admin/auth/logout', {
+      method: 'POST',
+    }, {
+      skipUnauthorizedHandler: true,
+    }),
 }

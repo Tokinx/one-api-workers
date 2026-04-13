@@ -15,7 +15,8 @@ import { Button } from '@/components/ui/button'
 import { useAuthStore } from '@/store/auth'
 import { useToast } from '@/components/ui/use-toast'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Menu, Zap } from 'lucide-react'
+import { Menu, RotateCcw, Zap } from 'lucide-react'
+import { parseUtcTimestamp } from '@/lib/utils'
 
 interface AppLayoutProps {
   children: ReactNode
@@ -24,30 +25,116 @@ interface AppLayoutProps {
 export function AppLayout({ children }: AppLayoutProps) {
   const navigate = useNavigate()
   const [adminToken, setAdminToken] = useState('')
+  const [verificationCode, setVerificationCode] = useState('')
+  const [challengeId, setChallengeId] = useState<string | null>(null)
+  const [challengeExpiresAt, setChallengeExpiresAt] = useState<string | null>(null)
   const [authError, setAuthError] = useState('')
-  const [isLoading, setIsLoading] = useState(false)
+  const [authStep, setAuthStep] = useState<'token' | 'verification'>('token')
+  const [isSubmitting, setIsSubmitting] = useState(false)
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false)
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false)
-  const { login, showAuthModal, closeAuthModal, isAuthenticated, isLoading: isAuthLoading } = useAuthStore()
+  const {
+    startLogin,
+    verifyLogin,
+    showAuthModal,
+    closeAuthModal,
+    isAuthenticated,
+    isLoading: isAuthLoading,
+  } = useAuthStore()
   const { addToast } = useToast()
+
+  const resetAuthDialog = () => {
+    setAdminToken('')
+    setVerificationCode('')
+    setChallengeId(null)
+    setChallengeExpiresAt(null)
+    setAuthError('')
+    setAuthStep('token')
+    setIsSubmitting(false)
+  }
+
+  const handleCloseAuthModal = () => {
+    resetAuthDialog()
+    closeAuthModal()
+  }
+
+  const finalizeLogin = () => {
+    resetAuthDialog()
+    setIsMobileNavOpen(false)
+    addToast('登录成功', 'success')
+    navigate('/dashboard', { replace: true })
+  }
 
   const handleAuthSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setAuthError('')
-    setIsLoading(true)
+    setIsSubmitting(true)
 
     try {
-      await login(adminToken)
-      setAdminToken('')
-      setIsMobileNavOpen(false)
-      addToast('登录成功', 'success')
-      navigate('/dashboard', { replace: true })
+      if (authStep === 'token') {
+        const loginResult = await startLogin(adminToken)
+
+        if (loginResult.requiresVerification) {
+          setAuthStep('verification')
+          setChallengeId(loginResult.challengeId)
+          setChallengeExpiresAt(loginResult.challengeExpiresAt)
+          setVerificationCode('')
+          addToast('验证码已发送到 Telegram', 'success')
+          return
+        }
+
+        finalizeLogin()
+        return
+      }
+
+      if (!challengeId) {
+        throw new Error('验证码会话不存在，请重新获取')
+      }
+
+      await verifyLogin(challengeId, verificationCode)
+      finalizeLogin()
     } catch (error) {
       setAuthError(error instanceof Error ? error.message : '管理员令牌无效')
     } finally {
-      setIsLoading(false)
+      setIsSubmitting(false)
     }
   }
+
+  const handleResendVerificationCode = async () => {
+    if (!adminToken.trim()) {
+      setAuthError('请先重新输入管理员令牌')
+      setAuthStep('token')
+      return
+    }
+
+    setAuthError('')
+    setIsSubmitting(true)
+
+    try {
+      const loginResult = await startLogin(adminToken)
+      if (!loginResult.requiresVerification) {
+        finalizeLogin()
+        return
+      }
+
+      setAuthStep('verification')
+      setChallengeId(loginResult.challengeId)
+      setChallengeExpiresAt(loginResult.challengeExpiresAt)
+      setVerificationCode('')
+      addToast('验证码已重新发送到 Telegram', 'success')
+    } catch (error) {
+      setAuthError(error instanceof Error ? error.message : '验证码发送失败')
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  const challengeExpiresText = (() => {
+    const date = challengeExpiresAt ? parseUtcTimestamp(challengeExpiresAt) : null
+    return date
+      ? date.toLocaleString('zh-CN', { hour12: false })
+      : ''
+  })()
 
   return (
     <div className="flex">
@@ -108,28 +195,58 @@ export function AppLayout({ children }: AppLayoutProps) {
       )}
 
       {/* Auth Dialog */}
-      <Dialog open={showAuthModal} onOpenChange={(open) => !open && closeAuthModal()}>
+      <Dialog open={showAuthModal} onOpenChange={(open) => !open && handleCloseAuthModal()}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>管理员身份验证</DialogTitle>
             <DialogDescription>
-              请输入管理员令牌以访问管理功能
+              {authStep === 'token'
+                ? '请输入管理员令牌以访问管理功能'
+                : '验证码已发送到 Telegram，请输入 6 位数字验证码完成登录'}
             </DialogDescription>
           </DialogHeader>
 
           <form onSubmit={handleAuthSubmit}>
             <div className="space-y-4">
-              <div className="space-y-2">
-                <Label className="block" htmlFor="adminToken">管理员令牌</Label>
-                <Input
-                  id="adminToken"
-                  type="password"
-                  placeholder="请输入管理员令牌"
-                  value={adminToken}
-                  onChange={(e) => setAdminToken(e.target.value)}
-                  required
-                />
-              </div>
+              {authStep === 'token' ? (
+                <div className="space-y-2">
+                  <Label className="block" htmlFor="adminToken">管理员令牌</Label>
+                  <Input
+                    id="adminToken"
+                    type="password"
+                    placeholder="请输入管理员令牌"
+                    value={adminToken}
+                    onChange={(e) => setAdminToken(e.target.value)}
+                    required
+                  />
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <Label className="block" htmlFor="verificationCode">Telegram 验证码</Label>
+                  <Input
+                    id="verificationCode"
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={6}
+                    placeholder="请输入 6 位验证码"
+                    value={verificationCode}
+                    onChange={(e) => setVerificationCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                    required
+                  />
+                  <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
+                    <span>{challengeExpiresText ? `验证码有效期至 ${challengeExpiresText}` : '验证码 5 分钟内有效'}</span>
+                    <button
+                      type="button"
+                      className="inline-flex items-center gap-1 text-foreground hover:text-muted-foreground"
+                      onClick={handleResendVerificationCode}
+                      disabled={isSubmitting}
+                    >
+                      <RotateCcw className="h-3.5 w-3.5" />
+                      重新发送
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {authError && (
                 <Alert variant="destructive">
@@ -142,13 +259,27 @@ export function AppLayout({ children }: AppLayoutProps) {
               <Button
                 type="button"
                 variant="outline"
-                onClick={closeAuthModal}
+                onClick={authStep === 'verification'
+                  ? () => {
+                    setAuthStep('token')
+                    setVerificationCode('')
+                    setChallengeId(null)
+                    setChallengeExpiresAt(null)
+                    setAuthError('')
+                  }
+                  : handleCloseAuthModal}
                 className='mr-0'
               >
-                取消
+                {authStep === 'verification' ? '返回上一步' : '取消'}
               </Button>
-              <Button type="submit" disabled={isLoading}>
-                {isLoading ? '验证中...' : '登录'}
+              <Button type="submit" disabled={isSubmitting}>
+                {isSubmitting
+                  ? authStep === 'verification'
+                    ? '验证中...'
+                    : '发送中...'
+                  : authStep === 'verification'
+                    ? '验证并登录'
+                    : '登录'}
               </Button>
             </DialogFooter>
           </form>

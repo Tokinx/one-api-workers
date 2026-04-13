@@ -14,6 +14,7 @@ import {
   X,
   PanelLeftClose,
   PanelLeftOpen,
+  SlidersHorizontal,
   Zap,
 } from "lucide-react";
 import { useAuthStore } from "@/store/auth";
@@ -31,6 +32,7 @@ const navItems: NavItem[] = [
   { title: "渠道管理", href: "/channels", icon: LinkIcon },
   { title: "令牌管理", href: "/tokens", icon: Key },
   { title: "定价管理", href: "/pricing", icon: DollarSign },
+  { title: "系统设置", href: "/settings", icon: SlidersHorizontal },
   { title: "API 测试", href: "/api-test", icon: TestTube2 },
 ];
 
@@ -77,8 +79,8 @@ export function Sidebar({
     }
   };
 
-  const handleLogout = () => {
-    logout();
+  const handleLogout = async () => {
+    await logout();
     navigate("/", { replace: true });
     onNavigate?.();
   };

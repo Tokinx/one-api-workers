@@ -12,6 +12,7 @@ import { Tokens } from "./pages/Tokens";
 import { Pricing } from "./pages/Pricing";
 import { ApiTest } from "./pages/ApiTest";
 import { NotFound } from "./pages/NotFound";
+import { SystemSettings } from "./pages/SystemSettings";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -141,6 +142,14 @@ function App() {
               element={
                 <ProtectedRoute>
                   <Pricing />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/settings"
+              element={
+                <ProtectedRoute>
+                  <SystemSettings />
                 </ProtectedRoute>
               }
             />

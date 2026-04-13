@@ -2,10 +2,9 @@ import { Context } from "hono";
 import { OpenAPIRoute } from "chanfana";
 import { z } from "zod";
 
-import { CONSTANTS } from "../constants";
 import { CommonErrorResponse, CommonSuccessfulResponse } from "../model";
 import { BillingConfig, normalizeBillingConfig } from "../billing";
-import { getJsonSetting, saveSetting } from "../utils";
+import { getSystemConfig, saveSystemConfig } from "../system-config";
 
 const billingConfigSchema = z.object({
     displayDecimals: z.number().int().min(0).max(9),
@@ -22,14 +21,9 @@ export class BillingConfigGetEndpoint extends OpenAPIRoute {
     };
 
     async handle(c: Context<HonoCustomType>) {
-        const billingConfig = await getJsonSetting<BillingConfig>(
-            c,
-            CONSTANTS.BILLING_CONFIG_KEY
-        );
-
         return {
             success: true,
-            data: normalizeBillingConfig(billingConfig),
+            data: normalizeBillingConfig(await getSystemConfig(c)),
         } as CommonResponse;
     }
 }
@@ -55,13 +49,13 @@ export class BillingConfigUpdateEndpoint extends OpenAPIRoute {
 
     async handle(c: Context<HonoCustomType>) {
         const body = await c.req.json<BillingConfig>();
+        const currentSystemConfig = await getSystemConfig(c);
         const config = normalizeBillingConfig(body);
 
-        await saveSetting(
-            c,
-            CONSTANTS.BILLING_CONFIG_KEY,
-            JSON.stringify(config)
-        );
+        await saveSystemConfig(c, {
+            ...currentSystemConfig,
+            displayDecimals: config.displayDecimals,
+        });
 
         return {
             success: true,

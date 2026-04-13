@@ -1,14 +1,21 @@
 import { create } from 'zustand'
 import { apiClient } from '@/api/client'
 import { clearScopedCacheByPrefix } from '@/lib/local-cache'
+import { type AdminLoginResponse } from '@/types'
+import {
+  clearAdminCredentials,
+  getStoredAdminCredential,
+  storeAdminSessionToken,
+} from '@/lib/admin-auth'
 
 interface AuthState {
   isAuthenticated: boolean
   isLoading: boolean
   error: string | null
   showAuthModal: boolean
-  login: (token: string) => Promise<void>
-  logout: () => void
+  startLogin: (token: string) => Promise<AdminLoginResponse>
+  verifyLogin: (challengeId: string, code: string) => Promise<void>
+  logout: () => Promise<void>
   checkAuth: () => Promise<void>
   openAuthModal: () => void
   closeAuthModal: () => void
@@ -20,18 +27,31 @@ export const useAuthStore = create<AuthState>((set) => ({
   error: null,
   showAuthModal: false,
 
-  login: async (token: string) => {
+  startLogin: async (token: string) => {
     set({ isLoading: true, error: null })
+
     try {
-      // Store token
-      localStorage.setItem('adminToken', token)
+      const response = await apiClient.startAdminLogin(token)
+      const loginResult = response.data as AdminLoginResponse
 
-      // Verify token by making a test request
-      await apiClient.checkAuth()
+      if (!loginResult) {
+        throw new Error('登录响应无效')
+      }
 
-      set({ isAuthenticated: true, isLoading: false, showAuthModal: false })
+      if (loginResult.sessionToken) {
+        storeAdminSessionToken(loginResult.sessionToken)
+        set({ isAuthenticated: true, isLoading: false, showAuthModal: false })
+        return loginResult
+      }
+
+      if (!loginResult.requiresVerification || !loginResult.challengeId) {
+        throw new Error('登录响应缺少验证码挑战信息')
+      }
+
+      set({ isAuthenticated: false, isLoading: false })
+      return loginResult
     } catch (error) {
-      localStorage.removeItem('adminToken')
+      clearAdminCredentials()
       set({
         isAuthenticated: false,
         isLoading: false,
@@ -41,16 +61,45 @@ export const useAuthStore = create<AuthState>((set) => ({
     }
   },
 
-  logout: () => {
+  verifyLogin: async (challengeId: string, code: string) => {
+    set({ isLoading: true, error: null })
+
+    try {
+      const response = await apiClient.verifyAdminLogin(challengeId, code)
+      const loginResult = response.data as AdminLoginResponse
+
+      if (!loginResult.sessionToken) {
+        throw new Error('登录响应缺少会话令牌')
+      }
+
+      storeAdminSessionToken(loginResult.sessionToken)
+      set({ isAuthenticated: true, isLoading: false, showAuthModal: false })
+    } catch (error) {
+      clearAdminCredentials()
+      set({
+        isAuthenticated: false,
+        isLoading: false,
+        error: error instanceof Error ? error.message : 'Verification failed',
+      })
+      throw error
+    }
+  },
+
+  logout: async () => {
+    try {
+      await apiClient.logoutAdmin()
+    } catch {
+      // ignore logout errors and clear local state anyway
+    }
+
     clearScopedCacheByPrefix('analytics:')
     clearScopedCacheByPrefix('usage-logs:')
-    localStorage.removeItem('adminToken')
+    clearAdminCredentials()
     set({ isAuthenticated: false, error: null })
   },
 
   checkAuth: async () => {
-    const token = localStorage.getItem('adminToken')
-    if (!token) {
+    if (!getStoredAdminCredential()) {
       set({ isAuthenticated: false, isLoading: false })
       return
     }
@@ -60,7 +109,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       await apiClient.checkAuth()
       set({ isAuthenticated: true, isLoading: false })
     } catch (error) {
-      localStorage.removeItem('adminToken')
+      clearAdminCredentials()
       set({ isAuthenticated: false, isLoading: false })
     }
   },

@@ -42,6 +42,29 @@ export interface BillingConfig {
   displayDecimals: number
 }
 
+export interface AdminSecurityConfig {
+  enabled: boolean
+  telegramBotToken: string
+  telegramChatId: string
+}
+
+export interface ApiDocsConfig {
+  enabled: boolean
+}
+
+export interface SystemConfig extends BillingConfig {
+  adminSecurity: AdminSecurityConfig
+  apiDocs: ApiDocsConfig
+}
+
+export interface AdminLoginResponse {
+  requiresVerification: boolean
+  challengeId: string | null
+  challengeExpiresAt: string | null
+  sessionToken: string | null
+  sessionExpiresAt: string | null
+}
+
 export interface PricingModel {
   input?: number
   output?: number
