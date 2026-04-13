@@ -110,8 +110,8 @@ type CommonResponse = {
 }
 
 type ModelPricing = {
-    input: number;
-    output: number;
+    input?: number;
+    output?: number;
     cache?: number;
     request?: number;
 }

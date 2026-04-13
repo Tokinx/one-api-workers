@@ -43,8 +43,8 @@ export interface BillingConfig {
 }
 
 export interface PricingModel {
-  input: number
-  output: number
+  input?: number
+  output?: number
   cache?: number
   request?: number
 }
