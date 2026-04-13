@@ -34,6 +34,7 @@ type ChannelRef = {
   key: string;
   label: string;
   type: string;
+  weight: number;
   keywords: string[];
 };
 type TokenRef = {
@@ -59,17 +60,17 @@ const FIELD_META: Array<{
 }> = [
   {
     key: "input",
-    label: "输入倍率",
+    label: "输入",
     placeholder: "0.000000",
   },
   {
     key: "output",
-    label: "输出倍率",
+    label: "输出",
     placeholder: "0.000000",
   },
   {
     key: "cache",
-    label: "缓存倍率",
+    label: "缓存",
     placeholder: "0.000000",
   },
   {
@@ -113,17 +114,39 @@ const normalizePricingEntry = (pricing?: Partial<PricingModel> | null): PricingR
   request: normalizePricingNumber(pricing?.request, DEFAULT_REQUEST_VALUE),
 });
 
+const normalizeChannelPriority = (value: unknown): number => {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return 0;
+  }
+
+  return Math.max(0, Math.trunc(value));
+};
+
 const sanitizePricingEntry = (pricing: PricingRow): Partial<PricingModel> | null => {
   const normalized = {
     input: normalizePricingNumber(pricing.input, 0),
     output: normalizePricingNumber(pricing.output, 0),
     cache: normalizePricingNumber(pricing.cache, 0),
-    request: normalizePricingNumber(pricing.request, 0),
+    request: normalizePricingNumber(pricing.request, DEFAULT_REQUEST_VALUE),
   };
 
-  const filtered = Object.fromEntries(
-    Object.entries(normalized).filter(([, value]) => value > 0),
-  ) as Partial<PricingModel>;
+  const filtered: Partial<PricingModel> = {};
+
+  if (normalized.input > 0) {
+    filtered.input = normalized.input;
+  }
+
+  if (normalized.output > 0) {
+    filtered.output = normalized.output;
+  }
+
+  if (normalized.cache > 0) {
+    filtered.cache = normalized.cache;
+  }
+
+  if (normalized.request > 0 && normalized.request !== DEFAULT_REQUEST_VALUE) {
+    filtered.request = normalized.request;
+  }
 
   return Object.keys(filtered).length > 0 ? filtered : null;
 };
@@ -178,11 +201,13 @@ const buildModelChannelMap = (channels: Channel[]): Map<string, ChannelRef[]> =>
 
     const label = config.name?.trim() || channel.key;
     const type = config.type?.trim() || "";
+    const weight = normalizeChannelPriority(config.weight);
     const channelRef: ChannelRef = {
       key: channel.key,
       label,
       type,
-      keywords: [channel.key, label, type].filter(Boolean),
+      weight,
+      keywords: [channel.key, label, type, String(weight)].filter(Boolean),
     };
 
     getChannelModels(config)
@@ -191,7 +216,13 @@ const buildModelChannelMap = (channels: Channel[]): Map<string, ChannelRef[]> =>
         const next = [...(channelMap.get(model.name) || [])];
         if (!next.some((item) => item.key === channel.key)) {
           next.push(channelRef);
-          next.sort((left, right) => left.label.localeCompare(right.label, "zh-CN"));
+          next.sort((left, right) => {
+            if (left.weight !== right.weight) {
+              return right.weight - left.weight;
+            }
+
+            return left.label.localeCompare(right.label, "zh-CN");
+          });
           channelMap.set(model.name, next);
         }
       });
@@ -334,6 +365,7 @@ export function Pricing() {
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hasHydratedRef = useRef(false);
   const lastSavedSignatureRef = useRef(JSON.stringify({}));
+  const skipNextPricingSyncRef = useRef(false);
 
   const pricingQuery = useQuery({
     queryKey: ["pricing"],
@@ -371,9 +403,18 @@ export function Pricing() {
   );
 
   useEffect(() => {
+    const normalizedPricing = normalizePricingConfig(pricingQuery.data || {});
+    const nextSignature = JSON.stringify(normalizedPricing);
+
+    if (skipNextPricingSyncRef.current) {
+      skipNextPricingSyncRef.current = false;
+      lastSavedSignatureRef.current = nextSignature;
+      return;
+    }
+
     setPricingRows(baseRows);
-    setJsonValue(JSON.stringify(pricingQuery.data || {}, null, 2));
-    lastSavedSignatureRef.current = JSON.stringify(normalizePricingConfig(pricingQuery.data || {}));
+    setJsonValue(JSON.stringify(normalizedPricing, null, 2));
+    lastSavedSignatureRef.current = nextSignature;
     hasHydratedRef.current = true;
     setSaveState("idle");
     setLastSavedAt(new Date());
@@ -394,6 +435,7 @@ export function Pricing() {
     },
     onSuccess: (_response, variables) => {
       lastSavedSignatureRef.current = variables.signature;
+      skipNextPricingSyncRef.current = true;
       queryClient.setQueryData(["pricing"], variables.config);
       setSaveState("saved");
       setLastSavedAt(new Date());
@@ -587,9 +629,7 @@ export function Pricing() {
   }, [editMode, jsonValue]);
 
   const currentPricingConfig = useMemo(() => {
-    return editMode === "cards"
-      ? buildConfigFromRows(pricingRows)
-      : normalizedJsonConfig;
+    return editMode === "cards" ? buildConfigFromRows(pricingRows) : normalizedJsonConfig;
   }, [editMode, normalizedJsonConfig, pricingRows]);
 
   const currentPricingSignature = useMemo(() => {
@@ -635,14 +675,7 @@ export function Pricing() {
         autoSaveTimerRef.current = null;
       }
     };
-  }, [
-    currentPricingConfig,
-    currentPricingSignature,
-    editMode,
-    normalizedJsonConfig,
-    saveMutation,
-    saveState,
-  ]);
+  }, [currentPricingConfig, currentPricingSignature, editMode, normalizedJsonConfig, saveMutation, saveState]);
 
   const handleSave = () => {
     if (autoSaveTimerRef.current) {
@@ -683,7 +716,7 @@ export function Pricing() {
 
     try {
       const parsed = normalizePricingConfig(JSON.parse(jsonValue));
-      setPricingRows(buildPricingRows(modelChannelMap, parsed, { sortConfiguredFirst: false }));
+      setPricingRows(buildPricingRows(modelChannelMap, parsed, { sortConfiguredFirst: true }));
       setEditMode("cards");
     } catch {
       addToast("JSON 格式错误", "error");
@@ -776,7 +809,6 @@ export function Pricing() {
               </div>
             </div>
           </div>
-
         </Card>
 
         {editMode === "cards" ? (
@@ -819,7 +851,7 @@ export function Pricing() {
                   </CardHeader>
 
                   <CardContent className="px-4 pb-4 space-y-2">
-                    <div className="grid grid-cols-2 gap-x-3 gap-y-1 bg-background/60 px-3 py-2 rounded-lg -mx-2">
+                    <div className="grid grid-cols-2 gap-x-3 gap-y-1 bg-background/60 px-3 py-2 rounded-lg">
                       {FIELD_META.map((field) => (
                         <label key={field.key} className="flex flex-row gap-1 items-center">
                           <span className="flex-shrink-0 text-xs font-medium text-muted-foreground mt-[1px]">
@@ -841,12 +873,14 @@ export function Pricing() {
                     <div className="flex flex-wrap gap-2">
                       {card.channels.length > 0 ? (
                         card.channels.map((channel) => (
-                          <span
-                            key={channel.key}
-                            className="text-xs text-muted-foreground rounded-sm px-1.5 py-0.5 bg-accent"
-                          >
-                            {channel.label}
-                          </span>
+                          <div key={channel.key} className="border border-accent flex rounded-sm">
+                            <span className="text-xs px-1.5 py-0.5 bg-accent text-muted-foreground border-r border-accent">
+                              {channel.label}
+                            </span>
+                            <span className="text-xs px-1.5 py-0.5 text-mist-400/60">
+                              {channel.weight}
+                            </span>
+                          </div>
                         ))
                       ) : (
                         <span className="text-xs text-muted-foreground">无匹配渠道</span>
