@@ -5,10 +5,6 @@ export const DEFAULT_BILLING_DISPLAY_DECIMALS = 6;
 export const MIN_BILLING_DISPLAY_DECIMALS = 0;
 export const MAX_BILLING_DISPLAY_DECIMALS = 9;
 
-const trimTrailingZeros = (value: string): string => {
-  return value.replace(/(\.\d*?[1-9])0+$/u, "$1").replace(/\.0+$/u, "").replace(/\.$/u, "");
-};
-
 export const normalizeBillingDisplayDecimals = (value: unknown): number => {
   const parsed = typeof value === "number" && Number.isFinite(value)
     ? Math.round(value)
@@ -38,6 +34,5 @@ export const usdToRawBilling = (value: string | number): number => {
 
 export const formatRawBillingInput = (value: number, displayDecimals = DEFAULT_BILLING_DISPLAY_DECIMALS): string => {
   const decimals = normalizeBillingDisplayDecimals(displayDecimals);
-  const formatted = rawBillingToUsd(value).toFixed(decimals);
-  return trimTrailingZeros(formatted) || "0";
+  return rawBillingToUsd(value).toFixed(decimals);
 };

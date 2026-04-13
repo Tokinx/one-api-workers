@@ -10,7 +10,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { useToast } from '@/components/ui/use-toast'
 import { useBillingConfig } from '@/hooks/use-billing-config'
-import { formatRawBillingInput, usdToRawBilling } from '@/lib/billing'
+import { DEFAULT_BILLING_DISPLAY_DECIMALS, rawBillingToUsd, usdToRawBilling } from '@/lib/billing'
 import { formatCurrency, copyToClipboard, generateTokenKey, cn } from '@/lib/utils'
 import {
   Plus,
@@ -33,6 +33,21 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { PageContainer } from '@/components/ui/page-container'
 
 type EditMode = 'form' | 'json'
+const INTEGER_QUOTA_PATTERN = /^\d*$/
+
+const formatQuotaInputValue = (value: number): string => {
+  return String(Math.max(0, Math.round(rawBillingToUsd(value))))
+}
+
+const parseQuotaInputValue = (value: string): number => {
+  const parsed = Number.parseInt(value || '0', 10)
+  return usdToRawBilling(Number.isFinite(parsed) ? Math.max(0, parsed) : 0)
+}
+
+const formatAvailableQuota = (value: number): string => {
+  const usdValue = Math.max(0, Math.floor(rawBillingToUsd(value)))
+  return `$${usdValue}`
+}
 
 export function Tokens({
   createMode = false,
@@ -58,13 +73,12 @@ export function Tokens({
   const [selectedChannels, setSelectedChannels] = useState<string[]>([])
   const [searchQuery, setSearchQuery] = useState('')
   const [openMenu, setOpenMenu] = useState<string | null>(null)
-  const [quotaInputValue, setQuotaInputValue] = useState('0')
+  const [quotaInputValue, setQuotaInputValue] = useState(formatQuotaInputValue(0))
 
   const { addToast } = useToast()
   const queryClient = useQueryClient()
   const { data: billingConfig } = useBillingConfig()
-  const displayDecimals = billingConfig?.displayDecimals ?? 6
-  const quotaInputStep = displayDecimals > 0 ? `0.${'0'.repeat(displayDecimals - 1)}1` : '1'
+  const displayDecimals = billingConfig?.displayDecimals ?? DEFAULT_BILLING_DISPLAY_DECIMALS
 
   const { data, isLoading, isFetching, refetch } = useQuery({
     queryKey: ['tokens'],
@@ -94,9 +108,9 @@ export function Tokens({
     setFormData(config)
     setJsonValue(JSON.stringify(config, null, 2))
     setSelectedChannels(config.channel_keys || [])
-    setQuotaInputValue(formatRawBillingInput(config.total_quota || 0, displayDecimals))
+    setQuotaInputValue(formatQuotaInputValue(config.total_quota || 0))
     setView('form')
-  }, [displayDecimals])
+  }, [])
 
   // Close menu when clicking outside
   useEffect(() => {
@@ -152,7 +166,7 @@ export function Tokens({
     setSelectedChannels([])
     setEditingKey(null)
     setEditMode('form')
-    setQuotaInputValue('0')
+    setQuotaInputValue(formatQuotaInputValue(0))
   }, [])
 
   useEffect(() => {
@@ -265,7 +279,7 @@ export function Tokens({
         }
         setFormData(normalizedConfig)
         setSelectedChannels(normalizedConfig.channel_keys || [])
-        setQuotaInputValue(formatRawBillingInput(normalizedConfig.total_quota || 0, displayDecimals))
+        setQuotaInputValue(formatQuotaInputValue(normalizedConfig.total_quota || 0))
         setEditMode('form')
       } catch {
         addToast('JSON格式错误', 'error')
@@ -359,8 +373,10 @@ export function Tokens({
               {filteredData?.map((token) => {
                 const config = typeof token.value === 'string' ? JSON.parse(token.value) : token.value
                 const channelKeys = config.channel_keys || []
+                const usedQuota = token.usage || 0
+                const availableQuota = Math.max((config.total_quota || 0) - usedQuota, 0)
                 const usagePercent = config.total_quota > 0
-                  ? Math.min(100, ((token.usage || 0) / config.total_quota) * 100)
+                  ? Math.min(100, (usedQuota / config.total_quota) * 100)
                   : 0
                 const isMenuOpen = openMenu === token.key
 
@@ -426,7 +442,7 @@ export function Tokens({
                           渠道: <span className="text-foreground">{channelKeys.length === 0 ? '全部' : `${channelKeys.length}个`}</span>
                         </span>
                         <span className="text-muted-foreground">
-                          配额: <span className="text-foreground">{formatCurrency(token.usage || 0, displayDecimals)}/{formatCurrency(config.total_quota || 0, displayDecimals)}</span>
+                          已用/可用: <span className="text-foreground">{formatCurrency(usedQuota, displayDecimals)}/{formatAvailableQuota(availableQuota)}</span>
                         </span>
                       </div>
                       <div className="h-1.5 bg-muted rounded-full overflow-hidden">
@@ -461,7 +477,7 @@ export function Tokens({
                       <div className="w-48 flex-shrink-0">
                         <div className="flex items-center justify-between text-xs mb-1">
                           <span className="text-muted-foreground">
-                            {formatCurrency(token.usage || 0, displayDecimals)} / {formatCurrency(config.total_quota || 0, displayDecimals)}
+                            已用 {formatCurrency(usedQuota, displayDecimals)} / 可用 {formatAvailableQuota(availableQuota)}
                           </span>
                           <span className={cn(
                             "font-medium",
@@ -627,22 +643,24 @@ export function Tokens({
             {/* Quota */}
             <Card>
               <CardContent className="p-5">
-                <h3 className="font-medium mb-1">使用配额</h3>
+                <h3 className="font-medium mb-1">可用额度</h3>
                 <p className="text-sm text-muted-foreground mb-4">
-                  输入美元金额展示值，系统会按原始整数计费单位保存；当前默认展示 {displayDecimals} 位小数。
+                  令牌可用的总额度，单位为美元，当已用额度达到总额度时，令牌将无法调用模型。
                 </p>
                 <div className="space-y-4">
                   <Input
-                    type="number"
+                    type="text"
+                    inputMode="numeric"
                     value={quotaInputValue}
                     onChange={(e) => {
                       const nextValue = e.target.value
+                      if (!INTEGER_QUOTA_PATTERN.test(nextValue)) {
+                        return
+                      }
                       setQuotaInputValue(nextValue)
-                      setFormData({ ...formData, total_quota: usdToRawBilling(nextValue) })
+                      setFormData({ ...formData, total_quota: parseQuotaInputValue(nextValue) })
                     }}
-                    placeholder={displayDecimals > 0 ? `1.${'0'.repeat(displayDecimals)}` : '1'}
-                    min="0"
-                    step={quotaInputStep}
+                    placeholder="1"
                   />
                   <div className="flex flex-wrap gap-2">
                     {quotaPresets.map((preset) => (
@@ -651,7 +669,7 @@ export function Tokens({
                         type="button"
                         onClick={() => {
                           setFormData({ ...formData, total_quota: preset.value })
-                          setQuotaInputValue(formatRawBillingInput(preset.value, displayDecimals))
+                          setQuotaInputValue(formatQuotaInputValue(preset.value))
                         }}
                         className={cn(
                           "px-4 py-2 rounded-lg text-sm font-medium transition-all",
