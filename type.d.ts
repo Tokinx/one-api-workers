@@ -109,10 +109,14 @@ type CommonResponse = {
     data?: any;
 }
 
+type PricingBillingMode = "volume" | "request";
+
 type ModelPricing = {
+    billingMode?: PricingBillingMode;
     input?: number;
     output?: number;
     cache?: number;
+    // 兼容旧版独立按次收费配置
     request?: number;
 }
 

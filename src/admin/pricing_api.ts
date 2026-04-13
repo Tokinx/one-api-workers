@@ -5,7 +5,10 @@ import { getJsonSetting, saveSetting } from "../utils";
 import { CONSTANTS } from "../constants";
 import { CommonErrorResponse, CommonSuccessfulResponse } from "../model";
 
+const pricingBillingModeSchema = z.enum(["volume", "request"]);
+
 const pricingModelSchema = z.object({
+    billingMode: pricingBillingModeSchema.optional(),
     input: z.number().optional(),
     output: z.number().optional(),
     cache: z.number().optional(),
@@ -18,6 +21,14 @@ const toPositiveNumber = (value: unknown): number | undefined => {
     }
 
     return value > 0 ? value : undefined;
+};
+
+const normalizeBillingMode = (value: unknown): PricingBillingMode | undefined => {
+    if (value === "volume" || value === "request") {
+        return value;
+    }
+
+    return undefined;
 };
 
 const sanitizePricingConfig = (
@@ -40,6 +51,21 @@ const sanitizePricingConfig = (
         const output = toPositiveNumber(pricing.output);
         const cache = toPositiveNumber(pricing.cache);
         const request = toPositiveNumber(pricing.request);
+        const billingMode = normalizeBillingMode(pricing.billingMode);
+        const hasVisiblePricing = input !== undefined || output !== undefined || cache !== undefined;
+        const isRequestMode = billingMode === "request";
+
+        // 旧版仅配置了 request 的场景，直接迁移为新版按次计费。
+        if (!billingMode && request !== undefined && !hasVisiblePricing) {
+            normalizedEntries.push([
+                normalizedModel,
+                {
+                    billingMode: "request",
+                    input: request,
+                },
+            ]);
+            return;
+        }
 
         if (input !== undefined) {
             normalizedPricing.input = input;
@@ -50,8 +76,15 @@ const sanitizePricingConfig = (
         if (cache !== undefined) {
             normalizedPricing.cache = cache;
         }
-        if (request !== undefined) {
+
+        // 只有旧版未声明 billingMode 的配置才保留 request，
+        // 避免和新版按量/按次模式混用。
+        if (!billingMode && request !== undefined) {
             normalizedPricing.request = request;
+        }
+
+        if ((isRequestMode || hasVisiblePricing) && (!normalizedPricing.request || billingMode)) {
+            normalizedPricing.billingMode = billingMode || "volume";
         }
 
         if (Object.keys(normalizedPricing).length === 0) {

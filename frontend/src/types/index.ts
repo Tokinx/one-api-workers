@@ -67,10 +67,14 @@ export interface AdminLoginResponse {
   sessionExpiresAt: string | null
 }
 
+export type PricingBillingMode = 'volume' | 'request'
+
 export interface PricingModel {
+  billingMode?: PricingBillingMode
   input?: number
   output?: number
   cache?: number
+  // 兼容旧版独立按次收费配置
   request?: number
 }
 

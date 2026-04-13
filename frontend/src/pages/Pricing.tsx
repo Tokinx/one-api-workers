@@ -1,7 +1,7 @@
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/api/client";
-import { Channel, PricingConfig, PricingModel, Token } from "@/types";
+import { Channel, PricingBillingMode, PricingConfig, PricingModel, Token } from "@/types";
 import { MultiSelectAutoCompleteInput, type AutoCompleteOption } from "@/components/ui/autocomplete";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -22,13 +22,14 @@ import { Check, FileJson, FileText, RefreshCw, Search } from "lucide-react";
 import { PageContainer } from "@/components/ui/page-container";
 
 type EditMode = "cards" | "json";
-type PricingField = "input" | "output" | "cache" | "request";
+type PricingField = "input" | "output" | "cache";
 type PricingRow = {
   model: string;
+  billingMode: PricingBillingMode;
   input: number;
   output: number;
   cache: number;
-  request: number;
+  legacyRequest: number;
 };
 type ChannelRef = {
   key: string;
@@ -45,7 +46,6 @@ type TokenRef = {
 
 const PRICING_DECIMALS = 6;
 const PRICING_INPUT_STEP = "0.000001";
-const DEFAULT_REQUEST_VALUE = 1;
 const AUTO_SAVE_DELAY_MS = 800;
 type SaveSource = "auto" | "manual";
 type SaveState = "idle" | "saving" | "saved" | "error" | "invalid";
@@ -73,10 +73,22 @@ const FIELD_META: Array<{
     label: "缓存",
     placeholder: "0.000000",
   },
+];
+
+const BILLING_MODE_OPTIONS: Array<{
+  value: PricingBillingMode;
+  label: string;
+  description: string;
+}> = [
   {
-    key: "request",
+    value: "volume",
+    label: "按量",
+    description: "输入 / 输出 / 缓存按每 M tokens 计费",
+  },
+  {
+    value: "request",
     label: "按次",
-    placeholder: "1.000000",
+    description: "成功响应后按固定金额计费",
   },
 ];
 
@@ -95,6 +107,14 @@ const normalizePricingNumber = (value: unknown, fallback = 0): number => {
   return Number(parsed.toFixed(PRICING_DECIMALS));
 };
 
+const normalizePricingBillingMode = (value: unknown): PricingBillingMode | undefined => {
+  if (value === "volume" || value === "request") {
+    return value;
+  }
+
+  return undefined;
+};
+
 const formatSaveTime = (value: Date | null): string => {
   if (!value) {
     return "--:--:--";
@@ -106,13 +126,35 @@ const formatSaveTime = (value: Date | null): string => {
   return `${hours}:${minutes}:${seconds}`;
 };
 
-const normalizePricingEntry = (pricing?: Partial<PricingModel> | null): PricingRow => ({
-  model: "",
-  input: normalizePricingNumber(pricing?.input, 0),
-  output: normalizePricingNumber(pricing?.output, 0),
-  cache: normalizePricingNumber(pricing?.cache, 0),
-  request: normalizePricingNumber(pricing?.request, DEFAULT_REQUEST_VALUE),
-});
+const normalizePricingEntry = (pricing?: Partial<PricingModel> | null): PricingRow => {
+  const input = normalizePricingNumber(pricing?.input, 0);
+  const output = normalizePricingNumber(pricing?.output, 0);
+  const cache = normalizePricingNumber(pricing?.cache, 0);
+  const legacyRequest = normalizePricingNumber(pricing?.request, 0);
+  const billingMode = normalizePricingBillingMode(pricing?.billingMode);
+  const hasVisiblePricing = input > 0 || output > 0 || cache > 0;
+
+  // 旧版仅配置了独立 request 时，直接映射成新版按次计费。
+  if (!billingMode && legacyRequest > 0 && !hasVisiblePricing) {
+    return {
+      model: "",
+      billingMode: "request",
+      input: legacyRequest,
+      output: 0,
+      cache: 0,
+      legacyRequest: 0,
+    };
+  }
+
+  return {
+    model: "",
+    billingMode: billingMode || "volume",
+    input,
+    output,
+    cache,
+    legacyRequest: billingMode ? 0 : legacyRequest,
+  };
+};
 
 const normalizeChannelPriority = (value: unknown): number => {
   if (typeof value !== "number" || !Number.isFinite(value)) {
@@ -124,13 +166,17 @@ const normalizeChannelPriority = (value: unknown): number => {
 
 const sanitizePricingEntry = (pricing: PricingRow): Partial<PricingModel> | null => {
   const normalized = {
+    billingMode: pricing.billingMode,
     input: normalizePricingNumber(pricing.input, 0),
     output: normalizePricingNumber(pricing.output, 0),
     cache: normalizePricingNumber(pricing.cache, 0),
-    request: normalizePricingNumber(pricing.request, DEFAULT_REQUEST_VALUE),
+    legacyRequest: normalizePricingNumber(pricing.legacyRequest, 0),
   };
 
   const filtered: Partial<PricingModel> = {};
+  const hasVisiblePricing = normalized.input > 0 || normalized.output > 0 || normalized.cache > 0;
+  const shouldPreserveLegacyRequest = normalized.legacyRequest > 0;
+  const isRequestMode = normalized.billingMode === "request";
 
   if (normalized.input > 0) {
     filtered.input = normalized.input;
@@ -144,8 +190,10 @@ const sanitizePricingEntry = (pricing: PricingRow): Partial<PricingModel> | null
     filtered.cache = normalized.cache;
   }
 
-  if (normalized.request > 0 && normalized.request !== DEFAULT_REQUEST_VALUE) {
-    filtered.request = normalized.request;
+  if (shouldPreserveLegacyRequest) {
+    filtered.request = normalized.legacyRequest;
+  } else if (isRequestMode || hasVisiblePricing) {
+    filtered.billingMode = normalized.billingMode;
   }
 
   return Object.keys(filtered).length > 0 ? filtered : null;
@@ -183,10 +231,11 @@ const createDefaultPricingRow = (model: string, pricing?: Partial<PricingModel> 
   const normalized = normalizePricingEntry(pricing);
   return {
     model,
+    billingMode: normalized.billingMode,
     input: normalized.input,
     output: normalized.output,
     cache: normalized.cache,
-    request: normalized.request,
+    legacyRequest: normalized.legacyRequest,
   };
 };
 
@@ -300,7 +349,7 @@ const buildPricingRows = (
 };
 
 const isCustomPricingRow = (row: PricingRow): boolean => {
-  return row.input > 0 || row.output > 0 || row.cache > 0 || row.request !== DEFAULT_REQUEST_VALUE;
+  return row.billingMode === "request" || row.input > 0 || row.output > 0 || row.cache > 0 || row.legacyRequest > 0;
 };
 
 type MultiSelectAutocompleteFieldProps = {
@@ -355,7 +404,7 @@ export function Pricing() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedChannels, setSelectedChannels] = useState<string[]>([]);
   const [selectedTokens, setSelectedTokens] = useState<string[]>([]);
-  const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
+  const [selectedBillingModes, setSelectedBillingModes] = useState<string[]>([]);
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
 
@@ -489,54 +538,25 @@ export function Pricing() {
       .sort((left, right) => (left.label || left.value).localeCompare(right.label || right.value, "zh-CN"));
   }, [tokensQuery.data]);
 
-  const typeOptions = useMemo<AutoCompleteOption[]>(() => {
-    const typeMap = new Map<string, { label: string; channelLabels: string[] }>();
-
-    (channelsQuery.data || []).forEach((channel) => {
-      const config = parseChannelConfig(channel);
-      if (!isChannelEnabled(config)) {
-        return;
-      }
-
-      const type = config.type?.trim();
-      if (!type) {
-        return;
-      }
-
-      const label = type;
-      const channelLabel = config.name?.trim() || channel.key;
-      const current = typeMap.get(type) || { label, channelLabels: [] };
-
-      if (!current.channelLabels.includes(channelLabel)) {
-        current.channelLabels.push(channelLabel);
-        current.channelLabels.sort((left, right) => left.localeCompare(right, "zh-CN"));
-      }
-
-      typeMap.set(type, current);
-    });
-
-    return Array.from(typeMap.entries())
-      .map(([type, meta]) => ({
-        value: type,
-        label: meta.label,
-        description: meta.channelLabels.join("、"),
-        keywords: [type, meta.label, ...meta.channelLabels],
-      }))
-      .sort((left, right) => (left.label || left.value).localeCompare(right.label || right.value, "zh-CN"));
-  }, [channelsQuery.data]);
+  const billingModeOptions = useMemo<AutoCompleteOption[]>(() => {
+    return BILLING_MODE_OPTIONS.map((option) => ({
+      value: option.value,
+      label: option.label,
+      description: option.description,
+      keywords: [option.value, option.label, option.description],
+    }));
+  }, []);
 
   const pricingCards = useMemo(() => {
     return pricingRows.map((row) => {
       const channels = modelChannelMap.get(row.model) || [];
       const tokens = modelTokenMap.get(row.model) || [];
-      const types = Array.from(new Set(channels.map((channel) => channel.type).filter(Boolean))).sort((left, right) =>
-        left.localeCompare(right, "zh-CN"),
-      );
       const searchTarget = [
         row.model,
+        row.billingMode,
+        BILLING_MODE_OPTIONS.find((option) => option.value === row.billingMode)?.label || "",
         ...channels.flatMap((channel) => channel.keywords),
         ...tokens.flatMap((token) => token.keywords),
-        ...types,
       ]
         .join(" ")
         .toLowerCase();
@@ -545,7 +565,6 @@ export function Pricing() {
         ...row,
         channels,
         tokens,
-        types,
         isCustomized: isCustomPricingRow(row),
         searchTarget,
       };
@@ -563,8 +582,10 @@ export function Pricing() {
   }, [tokenOptions]);
 
   useEffect(() => {
-    setSelectedTypes((current) => current.filter((value) => typeOptions.some((option) => option.value === value)));
-  }, [typeOptions]);
+    setSelectedBillingModes((current) =>
+      current.filter((value) => billingModeOptions.some((option) => option.value === value)),
+    );
+  }, [billingModeOptions]);
 
   const filteredCards = useMemo(() => {
     const normalizedSearchQuery = deferredSearchQuery.trim().toLowerCase();
@@ -578,7 +599,7 @@ export function Pricing() {
         return false;
       }
 
-      if (selectedTypes.length > 0 && !card.types.some((type) => selectedTypes.includes(type))) {
+      if (selectedBillingModes.length > 0 && !selectedBillingModes.includes(card.billingMode)) {
         return false;
       }
 
@@ -588,7 +609,7 @@ export function Pricing() {
 
       return true;
     });
-  }, [deferredSearchQuery, pricingCards, selectedChannels, selectedTokens, selectedTypes]);
+  }, [deferredSearchQuery, pricingCards, selectedBillingModes, selectedChannels, selectedTokens]);
 
   const handleRefresh = () => {
     pricingQuery.refetch();
@@ -727,7 +748,29 @@ export function Pricing() {
     const normalizedValue = normalizePricingNumber(nextValue, 0);
 
     setPricingRows((current) =>
-      current.map((row) => (row.model === model ? { ...row, [field]: normalizedValue } : row)),
+      current.map((row) =>
+        row.model === model
+          ? {
+              ...row,
+              [field]: normalizedValue,
+              legacyRequest: 0,
+            }
+          : row,
+      ),
+    );
+  };
+
+  const updateBillingMode = (model: string, nextMode: PricingBillingMode) => {
+    setPricingRows((current) =>
+      current.map((row) =>
+        row.model === model
+          ? {
+              ...row,
+              billingMode: nextMode,
+              legacyRequest: row.billingMode === nextMode ? row.legacyRequest : 0,
+            }
+          : row,
+      ),
     );
   };
 
@@ -779,12 +822,12 @@ export function Pricing() {
             />
 
             <MultiSelectAutocompleteField
-              label="类型筛选"
-              placeholder="选择渠道类型"
-              selectedValues={selectedTypes}
-              onChange={setSelectedTypes}
-              options={typeOptions}
-              emptyText="没有匹配类型"
+              label="收费类型"
+              placeholder="选择收费类型"
+              selectedValues={selectedBillingModes}
+              onChange={setSelectedBillingModes}
+              options={billingModeOptions}
+              emptyText="没有匹配收费类型"
             />
 
             <MultiSelectAutocompleteField
@@ -803,7 +846,7 @@ export function Pricing() {
                 <Input
                   value={searchQuery}
                   onChange={(event) => setSearchQuery(event.target.value)}
-                  placeholder="搜索模型、渠道、令牌或类型"
+                  placeholder="搜索模型、渠道、令牌或收费类型"
                   className="h-10 pl-9"
                 />
               </div>
@@ -851,10 +894,10 @@ export function Pricing() {
                   </CardHeader>
 
                   <CardContent className="px-4 pb-4 space-y-2">
-                    <div className="grid grid-cols-2 gap-x-3 gap-y-1 bg-background/60 px-3 py-2 rounded-lg">
+                    <div className="grid grid-cols-2 gap-x-3 gap-y-1 rounded-lg bg-background/60 px-3 py-2">
                       {FIELD_META.map((field) => (
-                        <label key={field.key} className="flex flex-row gap-1 items-center">
-                          <span className="flex-shrink-0 text-xs font-medium text-muted-foreground mt-[1px]">
+                        <label key={field.key} className="flex flex-row items-center gap-1">
+                          <span className="mt-[1px] flex-shrink-0 text-xs font-medium text-muted-foreground">
                             {field.label}
                           </span>
                           <Input
@@ -864,11 +907,33 @@ export function Pricing() {
                             value={card[field.key]}
                             onChange={(event) => updateRow(card.model, field.key, event.target.value)}
                             placeholder={field.placeholder}
-                            className="h-7 font-mono text-sm px-2 border-0 bg-transparent"
+                            className="h-7 border-0 bg-transparent px-2 font-mono text-sm"
                           />
                         </label>
                       ))}
+
+                      <label className="flex flex-row items-center gap-1">
+                        <div className="flex">
+                          {BILLING_MODE_OPTIONS.map((option) => (
+                            <Button
+                              key={option.value}
+                              type="button"
+                              size="sm"
+                              className={cn("h-6 px-2 text-xs shadow-none! bg-transparent! text-muted-foreground", card.billingMode === option.value && "bg-green-500/5! text-green-600")}
+                              onClick={() => updateBillingMode(card.model, option.value)}
+                            >
+                              {option.label}
+                            </Button>
+                          ))}
+                        </div>
+                      </label>
                     </div>
+
+                    {card.legacyRequest > 0 && (
+                      <p className="text-[11px] leading-5 text-muted-foreground">
+                        兼容旧版独立按次价格 {card.legacyRequest.toFixed(PRICING_DECIMALS)}，修改后会切换到新版计费规则。
+                      </p>
+                    )}
 
                     <div className="flex flex-wrap gap-2">
                       {card.channels.length > 0 ? (
@@ -877,7 +942,7 @@ export function Pricing() {
                             <span className="text-xs px-1.5 py-0.5 bg-accent text-muted-foreground border-r border-accent">
                               {channel.label}
                             </span>
-                            <span className="text-xs px-1.5 py-0.5 text-mist-400/60">
+                            <span className="text-xs px-1.5 py-0.5 text-mist-600/60">
                               {channel.weight}
                             </span>
                           </div>
@@ -896,7 +961,7 @@ export function Pricing() {
             <CardHeader>
               <CardTitle className="text-lg">JSON 配置</CardTitle>
               <CardDescription>
-                只会保存大于 0 的价格字段；切回卡片模式时，会与当前渠道中的模型集合自动合并。
+                默认只会保存大于 0 的价格字段；但 `billingMode: "request"` 即使价格全为 0，也会作为有效配置保留。切回卡片模式时，会与当前渠道中的模型集合自动合并。
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-2">
@@ -905,10 +970,10 @@ export function Pricing() {
                 onChange={(event) => setJsonValue(event.target.value)}
                 rows={24}
                 className="font-mono text-sm"
-                placeholder='{"gpt-4.1": {"input": 0.8, "output": 3.2, "request": 1}}'
+                placeholder='{"gpt-4.1": {"billingMode": "volume", "input": 0.8, "output": 3.2}}'
               />
               <p className="text-xs text-muted-foreground">
-                格式：模型名称 → {"{"} input?: 输入倍率, output?: 输出倍率, cache?: 缓存倍率, request?: 按次 {"}"}
+                格式：模型名称 → {"{"} billingMode?: "volume" | "request", input?: 输入价格, output?: 输出价格, cache?: 缓存价格, request?: 旧版独立按次价格 {"}"}
               </p>
             </CardContent>
           </Card>

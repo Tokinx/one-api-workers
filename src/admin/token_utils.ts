@@ -16,6 +16,18 @@ type UsageCostResult = {
     hasPricing: boolean;
 }
 
+const normalizeBillingMode = (value: unknown): PricingBillingMode | undefined => {
+    if (value === "volume" || value === "request") {
+        return value;
+    }
+
+    return undefined;
+};
+
+const calculateFixedCostRaw = (value: unknown): number => {
+    return calculateRequestCostRaw(value || 0);
+};
+
 // Token 工具对象
 export const TokenUtils = {
     async updateUsage(c: Context<HonoCustomType>, key: string, usageAmount: number): Promise<boolean> {
@@ -49,9 +61,47 @@ export const TokenUtils = {
     ): Promise<UsageCostResult> {
         const pricing = await this.getPricing(c, model, targetChannelConfig);
         const hasTokens = usage.prompt_tokens != null && usage.completion_tokens != null;
-        const requestCost = calculateRequestCostRaw(pricing?.request || 0);
+        const billingMode = normalizeBillingMode(pricing?.billingMode);
+        const hasVisiblePricing = Boolean(pricing?.input || pricing?.output || pricing?.cache);
+        const isLegacyRequestOnly = !billingMode && !hasVisiblePricing && Boolean(pricing?.request);
+        const requestCost = billingMode
+            ? 0
+            : calculateRequestCostRaw(pricing?.request || 0);
 
-        if (!pricing || (!hasTokens && requestCost <= 0)) {
+        if (!pricing) {
+            return {
+                totalCost: 0,
+                requestCost,
+                inputCost: 0,
+                outputCost: 0,
+                cacheCost: 0,
+                hasPricing: false,
+            };
+        }
+
+        if (billingMode === "request" || isLegacyRequestOnly) {
+            const inputCost = isLegacyRequestOnly
+                ? calculateFixedCostRaw(pricing.request)
+                : calculateFixedCostRaw(pricing.input);
+            const outputCost = isLegacyRequestOnly
+                ? 0
+                : calculateFixedCostRaw(pricing.output);
+            const cacheCost = !isLegacyRequestOnly && usage.cached_tokens && usage.cached_tokens > 0
+                ? calculateFixedCostRaw(pricing.cache)
+                : 0;
+            const totalCost = inputCost + outputCost + cacheCost;
+
+            return {
+                totalCost,
+                requestCost: 0,
+                inputCost,
+                outputCost,
+                cacheCost,
+                hasPricing: true,
+            };
+        }
+
+        if (!hasTokens && requestCost <= 0) {
             return {
                 totalCost: 0,
                 requestCost,
