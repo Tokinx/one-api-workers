@@ -12,6 +12,9 @@ import {
     PricingGetEndpoint, PricingUpdateEndpoint
 } from "./pricing_api"
 import {
+    BillingConfigGetEndpoint, BillingConfigUpdateEndpoint
+} from "./billing_api"
+import {
     AnalyticsOverviewEndpoint,
     AnalyticsTrendEndpoint,
     AnalyticsBreakdownEndpoint,
@@ -54,6 +57,8 @@ api.delete("/api/admin/token/:key", TokenDeleteEndpoint)
 // Pricing management routes
 api.get("/api/admin/pricing", PricingGetEndpoint)
 api.post("/api/admin/pricing", PricingUpdateEndpoint)
+api.get("/api/admin/billing/config", BillingConfigGetEndpoint)
+api.post("/api/admin/billing/config", BillingConfigUpdateEndpoint)
 
 // Analytics management routes
 api.get("/api/admin/analytics/overview", AnalyticsOverviewEndpoint)

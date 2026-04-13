@@ -45,7 +45,7 @@ type ChannelConfigRow = BaseDbRow & {
 type ApiTokenRow = BaseDbRow & {
     key: string;
     value: string; // JSON 字符串，解析后为 ApiTokenData 类型
-    usage: number;
+    usage: number; // 原始计费单位整数
 }
 
 type ChannelType =
@@ -116,10 +116,14 @@ type ModelPricing = {
     request?: number;
 }
 
+type BillingConfig = {
+    displayDecimals: number;
+}
+
 type ApiTokenData = {
     name: string;
     channel_keys: string[];
-    total_quota: number;
+    total_quota: number; // 原始计费单位整数
 }
 
 type RequestTrackingState = {

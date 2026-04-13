@@ -1,4 +1,5 @@
 import { Context } from "hono";
+import { BILLING_RAW_SCALE } from "../billing";
 
 export const DEFAULT_USAGE_ANALYTICS_DATASET_NAME = "usage_events_by_token";
 
@@ -234,6 +235,7 @@ const buildCommonPoint = (
             safeNumber(context.trackingState.retryCount),
             upstreamStatus,
             result === "success" ? 1 : 0,
+            BILLING_RAW_SCALE,
         ],
     };
 };

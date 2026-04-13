@@ -13,7 +13,7 @@ export class TokenListEndpoint extends OpenAPIRoute {
             ...CommonSuccessfulResponse(z.array(z.object({
                 key: z.string(),
                 value: z.string(),
-                usage: z.number(),
+                usage: z.number().int(),
                 created_at: z.string(),
                 updated_at: z.string(),
             }))),
@@ -48,7 +48,7 @@ export class TokenUpsertEndpoint extends OpenAPIRoute {
                         schema: z.object({
                             name: z.string().describe('Token name'),
                             channel_keys: z.array(z.string()).describe('Channel keys to bind (empty array means access to all channels)'),
-                            total_quota: z.number().describe('Total quota amount'),
+                            total_quota: z.number().int().nonnegative().describe('Total quota amount in raw billing units'),
                         }),
                     },
                 },

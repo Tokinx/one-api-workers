@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
+import { useBillingConfig } from "@/hooks/use-billing-config";
 import { readScopedCache, writeScopedCache } from "@/lib/local-cache";
 import { cn, formatCurrency, parseUtcTimestamp } from "@/lib/utils";
 import { Eye, RefreshCw, Search } from "lucide-react";
@@ -182,6 +183,8 @@ const DetailField = ({ label, value, mono = false }: { label: string; value: str
 };
 
 export function UsageLogs() {
+  const { data: billingConfig } = useBillingConfig();
+  const displayDecimals = billingConfig?.displayDecimals ?? 6;
   const defaultFilters = useMemo(() => createFilterPreset("24h"), []);
   const cachedLogsSnapshot = useMemo(() => readScopedCache<UsageLogPageCacheSnapshot>(USAGE_LOGS_PAGE_CACHE_KEY), []);
   const initialDraftFilters = useMemo(
@@ -450,7 +453,7 @@ export function UsageLogs() {
                             输入 {formatCompactNumber(item.promptTokens)} / 输出{" "}
                             {formatCompactNumber(item.completionTokens)}
                           </div>
-                          <div className="mt-1 text-xs text-muted-foreground">{formatCurrency(item.totalCost)}</div>
+                          <div className="mt-1 text-xs text-muted-foreground">{formatCurrency(item.totalCost, displayDecimals)}</div>
                         </td>
 
                         <td className="px-2 py-3 text-right">
@@ -577,7 +580,7 @@ export function UsageLogs() {
                   label="输入 / 输出 Tokens"
                   value={`${formatCompactNumber(selectedItem.promptTokens)} / ${formatCompactNumber(selectedItem.completionTokens)}`}
                 />
-                <DetailField label="总成本" value={formatCurrency(selectedItem.totalCost)} />
+                <DetailField label="总成本" value={formatCurrency(selectedItem.totalCost, displayDecimals)} />
                 <DetailField label="延迟" value={formatDuration(selectedItem.latencyMs)} />
               </div>
             </div>

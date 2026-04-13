@@ -8,13 +8,49 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/use-toast";
+import { BILLING_CONFIG_QUERY_KEY, useBillingConfig } from "@/hooks/use-billing-config";
+import { normalizeBillingDisplayDecimals } from "@/lib/billing";
 import { cn } from "@/lib/utils";
 import { getUniqueModelNamesFromChannels } from "@/lib/channel-models";
-import { Plus, RefreshCw, Trash2, FileJson, FileText, DollarSign, Check, Info, Search } from "lucide-react";
+import { Plus, RefreshCw, Trash2, FileJson, FileText, DollarSign, Check, Search } from "lucide-react";
 import { PageContainer } from "@/components/ui/page-container";
 import { Card } from "@/components/ui/card";
 
 type EditMode = "table" | "json";
+
+const PRICING_DECIMALS = 6;
+const PRICING_INPUT_STEP = "0.000001";
+
+const normalizePricingNumber = (value: number): number => {
+  if (!Number.isFinite(value)) {
+    return 0;
+  }
+
+  return Number(value.toFixed(PRICING_DECIMALS));
+};
+
+const normalizePricingConfig = (config: PricingConfig): PricingConfig => {
+  return Object.fromEntries(
+    Object.entries(config)
+      .map(([model, pricing]) => {
+        const normalizedModel = model.trim();
+        if (!normalizedModel) {
+          return null;
+        }
+
+        return [
+          normalizedModel,
+          {
+            input: normalizePricingNumber(pricing.input),
+            output: normalizePricingNumber(pricing.output),
+            cache: normalizePricingNumber(pricing.cache || 0),
+            request: normalizePricingNumber(pricing.request || 0),
+          },
+        ] as const;
+      })
+      .filter((entry): entry is readonly [string, PricingConfig[string]] => entry !== null),
+  );
+};
 
 export function Pricing() {
   const [editMode, setEditMode] = useState<EditMode>("table");
@@ -24,9 +60,11 @@ export function Pricing() {
   >([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [modelOptions, setModelOptions] = useState<AutoCompleteOption[]>([]);
+  const [billingDisplayDecimals, setBillingDisplayDecimals] = useState(PRICING_DECIMALS);
 
   const { addToast } = useToast();
   const queryClient = useQueryClient();
+  const billingConfigQuery = useBillingConfig();
 
   const { data, isLoading, isFetching, refetch } = useQuery({
     queryKey: ["pricing"],
@@ -53,7 +91,8 @@ export function Pricing() {
 
   useEffect(() => {
     if (data) {
-      const rows = Object.entries(data).map(([model, pricing]) => ({
+      const normalizedConfig = normalizePricingConfig(data);
+      const rows = Object.entries(normalizedConfig).map(([model, pricing]) => ({
         model,
         input: pricing.input,
         output: pricing.output,
@@ -61,9 +100,15 @@ export function Pricing() {
         request: pricing.request || 0,
       }));
       setPricingRows(rows);
-      setJsonValue(JSON.stringify(data, null, 2));
+      setJsonValue(JSON.stringify(normalizedConfig, null, 2));
     }
   }, [data]);
+
+  useEffect(() => {
+    if (billingConfigQuery.data) {
+      setBillingDisplayDecimals(billingConfigQuery.data.displayDecimals);
+    }
+  }, [billingConfigQuery.data]);
 
   const saveMutation = useMutation({
     mutationFn: async (config: PricingConfig) => {
@@ -75,6 +120,21 @@ export function Pricing() {
     },
     onError: (error: Error) => {
       addToast("保存失败：" + error.message, "error");
+    },
+  });
+
+  const billingConfigMutation = useMutation({
+    mutationFn: async (displayDecimals: number) => {
+      return apiClient.saveBillingConfig({
+        displayDecimals: normalizeBillingDisplayDecimals(displayDecimals),
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: BILLING_CONFIG_QUERY_KEY });
+      addToast("金额显示精度已保存", "success");
+    },
+    onError: (error: Error) => {
+      addToast("保存显示精度失败：" + error.message, "error");
     },
   });
 
@@ -91,10 +151,10 @@ export function Pricing() {
       pricingRows.forEach((row) => {
         if (row.model) {
           config[row.model] = {
-            input: row.input || 0,
-            output: row.output || 0,
-            cache: row.cache || 0,
-            request: row.request || 0,
+            input: normalizePricingNumber(row.input || 0),
+            output: normalizePricingNumber(row.output || 0),
+            cache: normalizePricingNumber(row.cache || 0),
+            request: normalizePricingNumber(row.request || 0),
           };
         }
       });
@@ -107,7 +167,7 @@ export function Pricing() {
       }
     }
 
-    saveMutation.mutate(config);
+    saveMutation.mutate(normalizePricingConfig(config));
   };
 
   const toggleEditMode = () => {
@@ -116,24 +176,24 @@ export function Pricing() {
       pricingRows.forEach((row) => {
         if (row.model) {
           config[row.model] = {
-            input: row.input || 0,
-            output: row.output || 0,
-            cache: row.cache || 0,
-            request: row.request || 0,
+            input: normalizePricingNumber(row.input || 0),
+            output: normalizePricingNumber(row.output || 0),
+            cache: normalizePricingNumber(row.cache || 0),
+            request: normalizePricingNumber(row.request || 0),
           };
         }
       });
-      setJsonValue(JSON.stringify(config, null, 2));
+      setJsonValue(JSON.stringify(normalizePricingConfig(config), null, 2));
       setEditMode("json");
     } else {
       try {
-        const config = JSON.parse(jsonValue);
+        const config = normalizePricingConfig(JSON.parse(jsonValue));
         const rows = Object.entries(config).map(([model, pricing]: [string, unknown]) => ({
           model,
-          input: (pricing as { input: number }).input || 0,
-          output: (pricing as { output: number }).output || 0,
-          cache: (pricing as { cache?: number }).cache || 0,
-          request: (pricing as { request?: number }).request || 0,
+          input: normalizePricingNumber((pricing as { input: number }).input || 0),
+          output: normalizePricingNumber((pricing as { output: number }).output || 0),
+          cache: normalizePricingNumber((pricing as { cache?: number }).cache || 0),
+          request: normalizePricingNumber((pricing as { request?: number }).request || 0),
         }));
         setPricingRows(rows);
         setEditMode("table");
@@ -176,11 +236,19 @@ export function Pricing() {
   return (
     <PageContainer
       title="定价管理"
-      description="配置模型使用成本倍率，基础配额单位：1M tokens = $1.00"
+      description="配置模型成本倍率，并独立控制金额展示精度。"
       actions={
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching}>
-            <RefreshCw className={cn("h-4 w-4", isFetching && "animate-spin")} />
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              refetch();
+              billingConfigQuery.refetch();
+            }}
+            disabled={isFetching || billingConfigQuery.isFetching}
+          >
+            <RefreshCw className={cn("h-4 w-4", (isFetching || billingConfigQuery.isFetching) && "animate-spin")} />
           </Button>
           <Button variant="outline" size="sm" onClick={toggleEditMode}>
             {editMode === "table" ? <FileJson className="h-4 w-4" /> : <FileText className="h-4 w-4" />}
@@ -193,6 +261,33 @@ export function Pricing() {
         </div>
       }
     >
+      <Card className="mb-4 border-0">
+        <div className="flex flex-col gap-4 p-5 md:flex-row md:items-end md:justify-between">
+          <div className="space-y-2">
+            <Label className="text-sm font-medium">金额显示小数位</Label>
+            <Input
+              type="number"
+              min="0"
+              max="9"
+              value={billingDisplayDecimals}
+              onChange={(e) => setBillingDisplayDecimals(normalizeBillingDisplayDecimals(Number(e.target.value)))}
+              className="w-32"
+            />
+            <p className="text-xs text-muted-foreground">
+              默认 6 位。只影响前端展示，不改变 API 返回的原始数值。
+            </p>
+          </div>
+          <Button
+            variant="outline"
+            onClick={() => billingConfigMutation.mutate(billingDisplayDecimals)}
+            disabled={billingConfigMutation.isPending}
+          >
+            <Check className="h-4 w-4 mr-1" />
+            保存显示设置
+          </Button>
+        </div>
+      </Card>
+
       {editMode === "table" ? (
         isLoading ? (
           <div className="flex items-center justify-center py-20">
@@ -208,7 +303,7 @@ export function Pricing() {
             </div>
             <h3 className="font-semibold text-lg mb-1">暂无定价配置</h3>
             <p className="text-muted-foreground text-sm text-center max-w-sm mb-6">
-              可调整倍率控制输入/输出成本，或者设置按次扣费。
+              可调整倍率控制输入/输出成本，或者设置按次扣费；金额展示精度单独配置。
             </p>
             <Button onClick={addRow}>
               <Plus className="h-4 w-4 mr-1" />
@@ -265,32 +360,36 @@ export function Pricing() {
                       type="number"
                       value={row.input}
                       onChange={(e) => updateRow(row._i, "input", parseFloat(e.target.value) || 0)}
-                      step="0.001"
+                      step={PRICING_INPUT_STEP}
                       min="0"
+                      placeholder="0.000000"
                       className="font-mono text-sm h-8"
                     />
                     <Input
                       type="number"
                       value={row.output}
                       onChange={(e) => updateRow(row._i, "output", parseFloat(e.target.value) || 0)}
-                      step="0.001"
+                      step={PRICING_INPUT_STEP}
                       min="0"
+                      placeholder="0.000000"
                       className="font-mono text-sm h-8"
                     />
                     <Input
                       type="number"
                       value={row.cache}
                       onChange={(e) => updateRow(row._i, "cache", parseFloat(e.target.value) || 0)}
-                      step="0.001"
+                      step={PRICING_INPUT_STEP}
                       min="0"
+                      placeholder="0.000000"
                       className="font-mono text-sm h-8"
                     />
                     <Input
                       type="number"
                       value={row.request}
                       onChange={(e) => updateRow(row._i, "request", parseFloat(e.target.value) || 0)}
-                      step="0.001"
+                      step={PRICING_INPUT_STEP}
                       min="0"
+                      placeholder="0.000000"
                       className="font-mono text-sm h-8"
                     />
                     <Button

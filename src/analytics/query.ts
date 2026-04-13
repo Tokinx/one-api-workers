@@ -1,5 +1,6 @@
 import { Context } from "hono";
 
+import { BILLING_RAW_SCALE, LEGACY_TO_RAW_FACTOR } from "../billing";
 import { DEFAULT_USAGE_ANALYTICS_DATASET_NAME } from "./usage-logger";
 
 export type AnalyticsRange = "24h" | "7d" | "30d" | "90d";
@@ -129,6 +130,7 @@ const DOUBLE_FIELDS = {
     retryCount: "double7",
     upstreamStatus: "double8",
     successFlag: "double9",
+    billingScale: "double10",
 } as const;
 
 const BREAKDOWN_FIELDS: Record<AnalyticsBreakdownDimension, string> = {
@@ -194,6 +196,7 @@ const USAGE_LOG_NUMERIC_COLUMNS = [
     DOUBLE_FIELDS.retryCount,
     DOUBLE_FIELDS.upstreamStatus,
     DOUBLE_FIELDS.successFlag,
+    DOUBLE_FIELDS.billingScale,
 ];
 
 const ALL_PROBED_COLUMNS = [
@@ -535,6 +538,18 @@ const buildDoubleSelect = (
         : `0 AS ${alias}`;
 };
 
+const buildNormalizedTotalCostExpression = (support: DatasetColumnSupport): string => {
+    if (!isColumnAvailable(support, DOUBLE_FIELDS.totalCost)) {
+        return "0";
+    }
+
+    if (!isColumnAvailable(support, DOUBLE_FIELDS.billingScale)) {
+        return `${DOUBLE_FIELDS.totalCost} * ${LEGACY_TO_RAW_FACTOR}`;
+    }
+
+    return `if(${DOUBLE_FIELDS.billingScale} > 0, ${DOUBLE_FIELDS.totalCost} * (${BILLING_RAW_SCALE} / ${DOUBLE_FIELDS.billingScale}), ${DOUBLE_FIELDS.totalCost} * ${LEGACY_TO_RAW_FACTOR})`;
+};
+
 const hasAnyLegacyLogSchema = (support: DatasetColumnSupport): boolean => {
     return LEGACY_BLOB_COLUMNS.some((columnName) => isColumnAvailable(support, columnName));
 };
@@ -608,11 +623,13 @@ export const queryUsageOverview = async (
 ) => {
     const { range, config } = getRangeConfig(requestedRange);
     const dataset = getDatasetName(c);
+    const columnSupport = await getDatasetColumnSupport(c, dataset, buildRangeWhereClause(config));
+    const normalizedTotalCostExpression = buildNormalizedTotalCostExpression(columnSupport);
     const rows = await runAnalyticsQuery<Record<string, unknown>>(c, `
 SELECT
     sum(_sample_interval) AS requests,
     sum(${DOUBLE_FIELDS.successFlag} * _sample_interval) AS successes,
-    sum(${DOUBLE_FIELDS.totalCost} * _sample_interval) AS total_cost,
+    sum(${normalizedTotalCostExpression} * _sample_interval) AS total_cost,
     sum(${DOUBLE_FIELDS.totalTokens} * _sample_interval) AS total_tokens,
     sum(${DOUBLE_FIELDS.promptTokens} * _sample_interval) AS prompt_tokens,
     sum(${DOUBLE_FIELDS.completionTokens} * _sample_interval) AS completion_tokens,
@@ -648,12 +665,14 @@ export const queryUsageTrend = async (
     const { range, config } = getRangeConfig(requestedRange);
     const dataset = getDatasetName(c);
     const trendWindow = buildTrendWindow(range, config);
+    const columnSupport = await getDatasetColumnSupport(c, dataset, trendWindow.whereClause);
+    const normalizedTotalCostExpression = buildNormalizedTotalCostExpression(columnSupport);
     const rows = await runAnalyticsQuery<Record<string, unknown>>(c, `
 SELECT
     toUnixTimestamp(${buildBucketClause(config)}) AS bucket_ts,
     sum(_sample_interval) AS requests,
     sum(${DOUBLE_FIELDS.successFlag} * _sample_interval) AS successes,
-    sum(${DOUBLE_FIELDS.totalCost} * _sample_interval) AS total_cost
+    sum(${normalizedTotalCostExpression} * _sample_interval) AS total_cost
 FROM ${dataset}
 WHERE ${trendWindow.whereClause}
 GROUP BY bucket_ts
@@ -696,12 +715,14 @@ export const queryUsageBreakdown = async (
         : "token") as AnalyticsBreakdownDimension;
     const dataset = getDatasetName(c);
     const dimensionField = BREAKDOWN_FIELDS[dimension];
+    const columnSupport = await getDatasetColumnSupport(c, dataset, buildRangeWhereClause(config));
+    const normalizedTotalCostExpression = buildNormalizedTotalCostExpression(columnSupport);
     const rows = await runAnalyticsQuery<Record<string, unknown>>(c, `
 SELECT
     ${dimensionField} AS label,
     sum(_sample_interval) AS requests,
     sum(${DOUBLE_FIELDS.successFlag} * _sample_interval) AS successes,
-    sum(${DOUBLE_FIELDS.totalCost} * _sample_interval) AS total_cost,
+    sum(${normalizedTotalCostExpression} * _sample_interval) AS total_cost,
     sum(${DOUBLE_FIELDS.promptTokens} * _sample_interval) AS prompt_tokens,
     sum(${DOUBLE_FIELDS.completionTokens} * _sample_interval) AS completion_tokens,
     sum(${DOUBLE_FIELDS.latencyMs} * _sample_interval) / sum(_sample_interval) AS avg_latency_ms
@@ -789,7 +810,7 @@ SELECT
     ${buildDoubleSelect(columnSupport, DOUBLE_FIELDS.completionTokens, "completion_tokens")},
     ${buildDoubleSelect(columnSupport, DOUBLE_FIELDS.cachedTokens, "cached_tokens")},
     ${buildDoubleSelect(columnSupport, DOUBLE_FIELDS.totalTokens, "total_tokens")},
-    ${buildDoubleSelect(columnSupport, DOUBLE_FIELDS.totalCost, "total_cost")},
+    ${buildNormalizedTotalCostExpression(columnSupport)} AS total_cost,
     ${buildDoubleSelect(columnSupport, DOUBLE_FIELDS.latencyMs, "latency_ms")},
     ${buildDoubleSelect(columnSupport, DOUBLE_FIELDS.retryCount, "retry_count")},
     ${buildDoubleSelect(columnSupport, DOUBLE_FIELDS.upstreamStatus, "upstream_status")}
@@ -962,7 +983,7 @@ SELECT
     ${buildDoubleSelect(columnSupport, DOUBLE_FIELDS.completionTokens, "completion_tokens")},
     ${buildDoubleSelect(columnSupport, DOUBLE_FIELDS.cachedTokens, "cached_tokens")},
     ${buildDoubleSelect(columnSupport, DOUBLE_FIELDS.totalTokens, "total_tokens")},
-    ${buildDoubleSelect(columnSupport, DOUBLE_FIELDS.totalCost, "total_cost")},
+    ${buildNormalizedTotalCostExpression(columnSupport)} AS total_cost,
     ${buildDoubleSelect(columnSupport, DOUBLE_FIELDS.latencyMs, "latency_ms")},
     ${buildDoubleSelect(columnSupport, DOUBLE_FIELDS.retryCount, "retry_count")},
     ${buildDoubleSelect(columnSupport, DOUBLE_FIELDS.upstreamStatus, "upstream_status")}

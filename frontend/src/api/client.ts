@@ -8,6 +8,7 @@ import {
   AnalyticsEventsData,
   AnalyticsBreakdownDimension,
   AnalyticsRange,
+  BillingConfig,
   UsageLogFilters,
   UsageLogSearchData,
 } from '@/types'
@@ -215,6 +216,14 @@ export const apiClient = {
 
   savePricing: (config: unknown) =>
     request('/api/admin/pricing', {
+      method: 'POST',
+      body: JSON.stringify(config),
+    }),
+
+  getBillingConfig: () => request<ApiResponse<BillingConfig>>('/api/admin/billing/config', { method: 'GET' }),
+
+  saveBillingConfig: (config: BillingConfig) =>
+    request<ApiResponse<BillingConfig>>('/api/admin/billing/config', {
       method: 'POST',
       body: JSON.stringify(config),
     }),

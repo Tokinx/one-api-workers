@@ -38,6 +38,10 @@ export interface TokenConfig {
   total_quota: number
 }
 
+export interface BillingConfig {
+  displayDecimals: number
+}
+
 export interface PricingModel {
   input: number
   output: number

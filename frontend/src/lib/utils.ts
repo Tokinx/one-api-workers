@@ -1,5 +1,10 @@
 import { type ClassValue, clsx } from "clsx"
 import { twMerge } from "tailwind-merge"
+import {
+  DEFAULT_BILLING_DISPLAY_DECIMALS,
+  normalizeBillingDisplayDecimals,
+  rawBillingToUsd,
+} from "./billing"
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
@@ -24,15 +29,18 @@ export function parseUtcTimestamp(value: string): Date | null {
   return Number.isNaN(date.getTime()) ? null : date
 }
 
-export function formatCurrency(value: number): string {
-  return `$${(value / 1000000).toFixed(2)}`
+export function formatCurrency(
+  value: number,
+  displayDecimals = DEFAULT_BILLING_DISPLAY_DECIMALS,
+): string {
+  const decimals = normalizeBillingDisplayDecimals(displayDecimals)
+  const normalizedValue = rawBillingToUsd(value)
+  const safeValue = Math.abs(normalizedValue) < 10 ** -decimals ? 0 : normalizedValue
+  return `$${safeValue.toFixed(decimals)}`
 }
 
-export function formatQuota(value: number): string {
-  if (value >= 1000000) {
-    return `$${(value / 1000000).toFixed(2)}`
-  }
-  return value.toString()
+export function formatQuota(value: number, displayDecimals = DEFAULT_BILLING_DISPLAY_DECIMALS): string {
+  return formatCurrency(value, displayDecimals)
 }
 
 export function copyToClipboard(text: string): Promise<void> {

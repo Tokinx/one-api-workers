@@ -19,6 +19,7 @@ type BreakdownChartCardProps = {
   isError?: boolean;
   barClassName?: string;
   badgeClassName?: string;
+  displayDecimals: number;
 };
 
 export function BreakdownChartCard({
@@ -29,6 +30,7 @@ export function BreakdownChartCard({
   isError,
   barClassName,
   badgeClassName,
+  displayDecimals,
 }: BreakdownChartCardProps) {
   const visibleItems = items.slice(0, 6);
   const maxCost = Math.max(...visibleItems.map((item) => item.totalCost), 0);
@@ -88,7 +90,7 @@ export function BreakdownChartCard({
                   </div>
                   <div className="text-right">
                     <div className="font-semibold">
-                      {useCostScale ? formatCurrency(item.totalCost) : formatCompactNumber(item.requests)}
+                      {useCostScale ? formatCurrency(item.totalCost, displayDecimals) : formatCompactNumber(item.requests)}
                     </div>
                     <div className="text-xs text-muted-foreground">{Math.round(item.avgLatencyMs)} ms</div>
                   </div>

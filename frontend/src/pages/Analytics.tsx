@@ -13,6 +13,7 @@ import { PageContainer } from "@/components/ui/page-container";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
+import { useBillingConfig } from "@/hooks/use-billing-config";
 import { readScopedCache, writeScopedCache } from "@/lib/local-cache";
 import { cn, formatCurrency } from "@/lib/utils";
 import { Activity, CircleDollarSign, Clock3, DatabaseZap, RefreshCw, ShieldCheck } from "lucide-react";
@@ -95,6 +96,8 @@ const getInitialAnalyticsRange = (): AnalyticsRange => {
 
 export function Analytics() {
   const [range, setRange] = useState<AnalyticsRange>(getInitialAnalyticsRange);
+  const { data: billingConfig } = useBillingConfig();
+  const displayDecimals = billingConfig?.displayDecimals ?? 6;
 
   const overviewCacheEntry = useMemo(
     () => readScopedCache<AnalyticsOverviewData>(getAnalyticsOverviewCacheKey(range)),
@@ -292,7 +295,7 @@ export function Analytics() {
               <CardTitle className="text-3xl">{formatCompactNumber(overview?.totals.completionTokens || 0)}</CardTitle>
             </CardHeader>
             <CardContent className="flex items-center justify-between text-sm text-muted-foreground">
-              <span>{formatCurrency(overview?.totals.totalCost || 0)}</span>
+              <span>{formatCurrency(overview?.totals.totalCost || 0, displayDecimals)}</span>
               <CircleDollarSign className="h-4 w-4 text-amber-500" />
             </CardContent>
           </Card>
@@ -315,7 +318,7 @@ export function Analytics() {
             <p className="mt-1 text-sm text-muted-foreground">写入第一批使用事件后，这里会展示完整柱状趋势。</p>
           </Card>
         ) : (
-          <TrendBarChart points={trend.points} range={range} />
+          <TrendBarChart points={trend.points} range={range} displayDecimals={displayDecimals} />
         )}
 
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
@@ -329,6 +332,7 @@ export function Analytics() {
               isError={breakdownStateMap[chart.dimension].isError}
               barClassName={chart.barClassName}
               badgeClassName={chart.badgeClassName}
+              displayDecimals={displayDecimals}
             />
           ))}
         </div>

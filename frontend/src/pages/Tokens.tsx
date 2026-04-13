@@ -9,6 +9,8 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { useToast } from '@/components/ui/use-toast'
+import { useBillingConfig } from '@/hooks/use-billing-config'
+import { formatRawBillingInput, usdToRawBilling } from '@/lib/billing'
 import { formatCurrency, copyToClipboard, generateTokenKey, cn } from '@/lib/utils'
 import {
   Plus,
@@ -23,7 +25,6 @@ import {
   ArrowLeft,
   Check,
   MoreHorizontal,
-  ChevronRight,
   AlertCircle,
   Search,
   RotateCcw,
@@ -57,9 +58,13 @@ export function Tokens({
   const [selectedChannels, setSelectedChannels] = useState<string[]>([])
   const [searchQuery, setSearchQuery] = useState('')
   const [openMenu, setOpenMenu] = useState<string | null>(null)
+  const [quotaInputValue, setQuotaInputValue] = useState('0')
 
   const { addToast } = useToast()
   const queryClient = useQueryClient()
+  const { data: billingConfig } = useBillingConfig()
+  const displayDecimals = billingConfig?.displayDecimals ?? 6
+  const quotaInputStep = displayDecimals > 0 ? `0.${'0'.repeat(displayDecimals - 1)}1` : '1'
 
   const { data, isLoading, isFetching, refetch } = useQuery({
     queryKey: ['tokens'],
@@ -89,8 +94,9 @@ export function Tokens({
     setFormData(config)
     setJsonValue(JSON.stringify(config, null, 2))
     setSelectedChannels(config.channel_keys || [])
+    setQuotaInputValue(formatRawBillingInput(config.total_quota || 0, displayDecimals))
     setView('form')
-  }, [])
+  }, [displayDecimals])
 
   // Close menu when clicking outside
   useEffect(() => {
@@ -146,6 +152,7 @@ export function Tokens({
     setSelectedChannels([])
     setEditingKey(null)
     setEditMode('form')
+    setQuotaInputValue('0')
   }, [])
 
   useEffect(() => {
@@ -234,6 +241,7 @@ export function Tokens({
     } else {
       try {
         config = JSON.parse(jsonValue)
+        config.total_quota = Math.max(0, Math.round(config.total_quota || 0))
       } catch {
         addToast('JSON格式错误', 'error')
         return
@@ -251,8 +259,13 @@ export function Tokens({
     } else {
       try {
         const config = JSON.parse(jsonValue)
-        setFormData(config)
-        setSelectedChannels(config.channel_keys || [])
+        const normalizedConfig = {
+          ...config,
+          total_quota: Math.max(0, Math.round(config.total_quota || 0)),
+        }
+        setFormData(normalizedConfig)
+        setSelectedChannels(normalizedConfig.channel_keys || [])
+        setQuotaInputValue(formatRawBillingInput(normalizedConfig.total_quota || 0, displayDecimals))
         setEditMode('form')
       } catch {
         addToast('JSON格式错误', 'error')
@@ -267,12 +280,12 @@ export function Tokens({
   }
 
   const quotaPresets = [
-    { label: '$1', value: 1000000 },
-    { label: '$5', value: 5000000 },
-    { label: '$10', value: 10000000 },
-    { label: '$20', value: 20000000 },
-    { label: '$50', value: 50000000 },
-    { label: '$100', value: 100000000 },
+    { label: '$1', value: usdToRawBilling(1) },
+    { label: '$5', value: usdToRawBilling(5) },
+    { label: '$10', value: usdToRawBilling(10) },
+    { label: '$20', value: usdToRawBilling(20) },
+    { label: '$50', value: usdToRawBilling(50) },
+    { label: '$100', value: usdToRawBilling(100) },
   ]
 
   const filteredData = data?.filter((token) => {
@@ -413,7 +426,7 @@ export function Tokens({
                           渠道: <span className="text-foreground">{channelKeys.length === 0 ? '全部' : `${channelKeys.length}个`}</span>
                         </span>
                         <span className="text-muted-foreground">
-                          配额: <span className="text-foreground">{formatCurrency(token.usage || 0)}/{formatCurrency(config.total_quota || 0)}</span>
+                          配额: <span className="text-foreground">{formatCurrency(token.usage || 0, displayDecimals)}/{formatCurrency(config.total_quota || 0, displayDecimals)}</span>
                         </span>
                       </div>
                       <div className="h-1.5 bg-muted rounded-full overflow-hidden">
@@ -448,7 +461,7 @@ export function Tokens({
                       <div className="w-48 flex-shrink-0">
                         <div className="flex items-center justify-between text-xs mb-1">
                           <span className="text-muted-foreground">
-                            {formatCurrency(token.usage || 0)} / {formatCurrency(config.total_quota || 0)}
+                            {formatCurrency(token.usage || 0, displayDecimals)} / {formatCurrency(config.total_quota || 0, displayDecimals)}
                           </span>
                           <span className={cn(
                             "font-medium",
@@ -615,21 +628,31 @@ export function Tokens({
             <Card>
               <CardContent className="p-5">
                 <h3 className="font-medium mb-1">使用配额</h3>
-                <p className="text-sm text-muted-foreground mb-4">设置令牌的最大使用额度（1百万 token = $1.00）</p>
+                <p className="text-sm text-muted-foreground mb-4">
+                  输入美元金额展示值，系统会按原始整数计费单位保存；当前默认展示 {displayDecimals} 位小数。
+                </p>
                 <div className="space-y-4">
                   <Input
                     type="number"
-                    value={formData.total_quota}
-                    onChange={(e) => setFormData({ ...formData, total_quota: parseInt(e.target.value) || 0 })}
-                    placeholder="1000000"
+                    value={quotaInputValue}
+                    onChange={(e) => {
+                      const nextValue = e.target.value
+                      setQuotaInputValue(nextValue)
+                      setFormData({ ...formData, total_quota: usdToRawBilling(nextValue) })
+                    }}
+                    placeholder={displayDecimals > 0 ? `1.${'0'.repeat(displayDecimals)}` : '1'}
                     min="0"
+                    step={quotaInputStep}
                   />
                   <div className="flex flex-wrap gap-2">
                     {quotaPresets.map((preset) => (
                       <button
                         key={preset.value}
                         type="button"
-                        onClick={() => setFormData({ ...formData, total_quota: preset.value })}
+                        onClick={() => {
+                          setFormData({ ...formData, total_quota: preset.value })
+                          setQuotaInputValue(formatRawBillingInput(preset.value, displayDecimals))
+                        }}
                         className={cn(
                           "px-4 py-2 rounded-lg text-sm font-medium transition-all",
                           formData.total_quota === preset.value
@@ -654,7 +677,7 @@ export function Tokens({
                 onChange={(e) => setJsonValue(e.target.value)}
                 rows={14}
                 className="font-mono text-sm"
-                placeholder='{"name": "令牌名称", "channel_keys": [], "total_quota": 1000000}'
+                placeholder='{"name": "令牌名称", "channel_keys": [], "total_quota": 1000000000}'
               />
             </CardContent>
           </Card>

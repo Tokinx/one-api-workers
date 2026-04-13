@@ -1,5 +1,9 @@
 import { Context } from "hono";
 
+import {
+    calculateRequestCostRaw,
+    calculateTokenRateCostRaw,
+} from "../billing";
 import { CONSTANTS } from "../constants";
 import { getJsonSetting } from "../utils";
 
@@ -45,7 +49,7 @@ export const TokenUtils = {
     ): Promise<UsageCostResult> {
         const pricing = await this.getPricing(c, model, targetChannelConfig);
         const hasTokens = usage.prompt_tokens != null && usage.completion_tokens != null;
-        const requestCost = pricing?.request || 0;
+        const requestCost = calculateRequestCostRaw(pricing?.request || 0);
 
         if (!pricing || (!hasTokens && requestCost <= 0)) {
             return {
@@ -58,12 +62,16 @@ export const TokenUtils = {
             };
         }
 
-        const inputCost = hasTokens ? usage.prompt_tokens! * pricing.input : 0;
-        const outputCost = hasTokens ? usage.completion_tokens! * pricing.output : 0;
+        const inputCost = hasTokens
+            ? calculateTokenRateCostRaw(usage.prompt_tokens!, pricing.input)
+            : 0;
+        const outputCost = hasTokens
+            ? calculateTokenRateCostRaw(usage.completion_tokens!, pricing.output)
+            : 0;
 
         let cacheCost = 0;
         if (hasTokens && usage.cached_tokens && usage.cached_tokens > 0 && pricing.cache) {
-            cacheCost = usage.cached_tokens * pricing.cache;
+            cacheCost = calculateTokenRateCostRaw(usage.cached_tokens, pricing.cache);
         }
 
         return {
