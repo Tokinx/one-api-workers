@@ -8,6 +8,8 @@ export const DEFAULT_ADMIN_SECURITY_CONFIG: AdminSecurityConfig = {
   enabled: false,
   telegramBotToken: "",
   telegramChatId: "",
+  verifiedFingerprint: "",
+  verifiedAt: null,
 };
 
 export const DEFAULT_API_DOCS_CONFIG: ApiDocsConfig = {
@@ -36,6 +38,10 @@ export const normalizeAdminSecurityConfig = (value?: Partial<AdminSecurityConfig
     enabled: value?.enabled === true,
     telegramBotToken: normalizeString(value?.telegramBotToken),
     telegramChatId: normalizeString(value?.telegramChatId),
+    verifiedFingerprint: normalizeString(value?.verifiedFingerprint),
+    verifiedAt: typeof value?.verifiedAt === "string" && value.verifiedAt.trim().length > 0
+      ? value.verifiedAt.trim()
+      : null,
   };
 };
 
@@ -59,4 +65,22 @@ export const isTelegramSecurityEnabled = (config?: Partial<AdminSecurityConfig> 
     && config.telegramBotToken.trim().length > 0
     && typeof config.telegramChatId === "string"
     && config.telegramChatId.trim().length > 0;
+};
+
+export const isTelegramSecurityVerified = (config?: Partial<AdminSecurityConfig> | null): boolean => {
+  return typeof config?.verifiedFingerprint === "string"
+    && config.verifiedFingerprint.trim().length > 0
+    && typeof config?.verifiedAt === "string"
+    && config.verifiedAt.trim().length > 0;
+};
+
+export const clearTelegramSecurityVerification = (
+  config: AdminSecurityConfig,
+): AdminSecurityConfig => {
+  return {
+    ...config,
+    enabled: false,
+    verifiedFingerprint: "",
+    verifiedAt: null,
+  };
 };

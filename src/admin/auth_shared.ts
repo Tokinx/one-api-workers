@@ -39,8 +39,8 @@ const formatTimestampInTimezone = (date: Date, timezone: string): string => {
 
     const parts = formatter.formatToParts(date);
     const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
-
-    return `${values.year}-${values.month}-${values.day} ${values.hour}:${values.minute}:${values.second} (${timezone})`;
+    // (${timezone})
+    return `${values.year}-${values.month}-${values.day} ${values.hour}:${values.minute}:${values.second}`;
 };
 
 const getRequestMetadata = (c: Context<HonoCustomType>): LoginRequestMetadata => {
@@ -134,14 +134,13 @@ const buildBaseMessageLines = (
     metadata: LoginRequestMetadata,
     occurredAt: Date
 ): Array<string> => {
-    const clientTimezone = metadata.timezone || DEFAULT_SYSTEM_TIMEZONE;
+    // const clientTimezone = metadata.timezone || DEFAULT_SYSTEM_TIMEZONE;
 
     return [
-        `时间（客户端）：${formatTimestampInTimezone(occurredAt, clientTimezone)}`,
-        `时间（系统）：${formatTimestampInTimezone(occurredAt, DEFAULT_SYSTEM_TIMEZONE)}`,
-        `IP：${metadata.clientIp || "未知 IP"}`,
-        `位置：${getLocationText(metadata)}`,
-        `节点：${metadata.colo || "未知节点"}${metadata.timezone ? ` · ${metadata.timezone}` : ""}`,
+        // `时间（客户端）：${formatTimestampInTimezone(occurredAt, clientTimezone)}`,
+        `时间：${formatTimestampInTimezone(occurredAt, DEFAULT_SYSTEM_TIMEZONE)}`,
+        `位置：${metadata.clientIp || "未知 IP"} （${getLocationText(metadata)}）`,
+        // `节点：${metadata.colo || "未知节点"}${metadata.timezone ? ` · ${metadata.timezone}` : ""}`,
     ];
 };
 
@@ -357,9 +356,8 @@ export const sendAdminLoginCodeNotification = async (
     await sendTelegramMessage(
         securityConfig,
         createTelegramMessage([
-            "【One API 管理后台】",
-            `登录验证码：${code}`,
-            `过期时间：${formatTimestampInTimezone(expiresDate, clientTimezone)}`,
+            "🔐 One API Workers 登录验证",
+            `${code} 验证码 5 分钟内有效，过期时间：${formatTimestampInTimezone(expiresDate, clientTimezone)}`,
             ...buildBaseMessageLines(metadata, occurredAt),
         ])
     );
@@ -377,8 +375,8 @@ export const sendAdminLoginResultNotification = async (
     await sendTelegramMessage(
         securityConfig,
         createTelegramMessage([
-            "【One API 管理后台】",
-            `登录${status === "success" ? "成功" : "失败"}`,
+            "🔐 One API Workers 登录提醒",
+            `您的账户在新设备上登录${status === "success" ? "成功" : "失败"}`,
             reason ? `原因：${reason}` : "",
             ...buildBaseMessageLines(metadata, occurredAt),
         ])
@@ -395,8 +393,8 @@ export const sendTelegramTestNotification = async (
     await sendTelegramMessage(
         securityConfig,
         createTelegramMessage([
-            "【One API 管理后台】",
-            "Telegram 绑定测试成功",
+            "🔐 One API Workers Telegram 测试",
+            "绑定测试成功",
             ...buildBaseMessageLines(metadata, occurredAt),
         ])
     );

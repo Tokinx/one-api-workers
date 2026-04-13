@@ -11,6 +11,8 @@ export const DEFAULT_ADMIN_SECURITY_CONFIG: AdminSecurityConfig = {
     enabled: false,
     telegramBotToken: "",
     telegramChatId: "",
+    verifiedFingerprint: "",
+    verifiedAt: null,
 };
 
 export const DEFAULT_API_DOCS_CONFIG: ApiDocsConfig = {
@@ -31,13 +33,51 @@ const normalizeString = (value: unknown): string => {
     return typeof value === "string" ? value.trim() : "";
 };
 
+const normalizeNullableString = (value: unknown): string | null => {
+    return typeof value === "string" && value.trim().length > 0
+        ? value.trim()
+        : null;
+};
+
+export const buildTelegramVerificationFingerprint = (
+    telegramBotToken: string,
+    telegramChatId: string
+): string => {
+    const source = `${telegramBotToken.trim()}::${telegramChatId.trim()}`;
+    let hash = 2166136261;
+
+    for (let index = 0; index < source.length; index += 1) {
+        hash ^= source.charCodeAt(index);
+        hash = Math.imul(hash, 16777619);
+    }
+
+    return source ? `tgv1-${(hash >>> 0).toString(16)}` : "";
+};
+
 export const normalizeAdminSecurityConfig = (
     value: Partial<AdminSecurityConfig> | null | undefined
 ): AdminSecurityConfig => {
+    const telegramBotToken = normalizeString(value?.telegramBotToken);
+    const telegramChatId = normalizeString(value?.telegramChatId);
+    const expectedFingerprint = buildTelegramVerificationFingerprint(
+        telegramBotToken,
+        telegramChatId
+    );
+    const verifiedFingerprint = normalizeString(value?.verifiedFingerprint);
+    const verifiedAt = normalizeNullableString(value?.verifiedAt);
+    const isVerified = Boolean(
+        expectedFingerprint
+        && verifiedFingerprint
+        && verifiedFingerprint === expectedFingerprint
+        && verifiedAt
+    );
+
     return {
-        enabled: normalizeBoolean(value?.enabled),
-        telegramBotToken: normalizeString(value?.telegramBotToken),
-        telegramChatId: normalizeString(value?.telegramChatId),
+        enabled: normalizeBoolean(value?.enabled) && isVerified,
+        telegramBotToken,
+        telegramChatId,
+        verifiedFingerprint: isVerified ? verifiedFingerprint : "",
+        verifiedAt: isVerified ? verifiedAt : null,
     };
 };
 

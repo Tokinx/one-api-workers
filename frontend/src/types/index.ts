@@ -46,6 +46,8 @@ export interface AdminSecurityConfig {
   enabled: boolean
   telegramBotToken: string
   telegramChatId: string
+  verifiedFingerprint: string
+  verifiedAt: string | null
 }
 
 export interface ApiDocsConfig {

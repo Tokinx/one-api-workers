@@ -249,7 +249,7 @@ export const apiClient = {
     }),
 
   sendTelegramTestMessage: (payload: Pick<SystemConfig['adminSecurity'], 'telegramBotToken' | 'telegramChatId'>) =>
-    request<ApiResponse<boolean>>('/api/admin/system/telegram/test', {
+    request<ApiResponse<Pick<SystemConfig['adminSecurity'], 'verifiedFingerprint' | 'verifiedAt'>>>('/api/admin/system/telegram/test', {
       method: 'POST',
       body: JSON.stringify(payload),
     }),

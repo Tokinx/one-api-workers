@@ -1,4 +1,4 @@
-import { useDeferredValue, useEffect, useMemo, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/api/client";
 import { Channel, PricingConfig, PricingModel, Token } from "@/types";
@@ -45,6 +45,9 @@ type TokenRef = {
 const PRICING_DECIMALS = 6;
 const PRICING_INPUT_STEP = "0.000001";
 const DEFAULT_REQUEST_VALUE = 1;
+const AUTO_SAVE_DELAY_MS = 800;
+type SaveSource = "auto" | "manual";
+type SaveState = "idle" | "saving" | "saved" | "error" | "invalid";
 type BuildPricingRowsOptions = {
   sortConfiguredFirst?: boolean;
 };
@@ -89,6 +92,17 @@ const normalizePricingNumber = (value: unknown, fallback = 0): number => {
   }
 
   return Number(parsed.toFixed(PRICING_DECIMALS));
+};
+
+const formatSaveTime = (value: Date | null): string => {
+  if (!value) {
+    return "--:--:--";
+  }
+
+  const hours = String(value.getHours()).padStart(2, "0");
+  const minutes = String(value.getMinutes()).padStart(2, "0");
+  const seconds = String(value.getSeconds()).padStart(2, "0");
+  return `${hours}:${minutes}:${seconds}`;
 };
 
 const normalizePricingEntry = (pricing?: Partial<PricingModel> | null): PricingRow => ({
@@ -311,10 +325,15 @@ export function Pricing() {
   const [selectedChannels, setSelectedChannels] = useState<string[]>([]);
   const [selectedTokens, setSelectedTokens] = useState<string[]>([]);
   const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
+  const [saveState, setSaveState] = useState<SaveState>("idle");
+  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
 
   const deferredSearchQuery = useDeferredValue(searchQuery);
   const { addToast } = useToast();
   const queryClient = useQueryClient();
+  const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hasHydratedRef = useRef(false);
+  const lastSavedSignatureRef = useRef(JSON.stringify({}));
 
   const pricingQuery = useQuery({
     queryKey: ["pricing"],
@@ -354,16 +373,40 @@ export function Pricing() {
   useEffect(() => {
     setPricingRows(baseRows);
     setJsonValue(JSON.stringify(pricingQuery.data || {}, null, 2));
+    lastSavedSignatureRef.current = JSON.stringify(normalizePricingConfig(pricingQuery.data || {}));
+    hasHydratedRef.current = true;
+    setSaveState("idle");
+    setLastSavedAt(new Date());
   }, [baseRows, pricingQuery.data]);
 
   const saveMutation = useMutation({
-    mutationFn: async (config: PricingConfig) => apiClient.savePricing(config),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["pricing"] });
-      addToast("定价配置已保存", "success");
+    mutationFn: async ({ config }: { config: PricingConfig; source: SaveSource; signature: string }) =>
+      apiClient.savePricing(config),
+    onMutate: ({ source }) => {
+      if (autoSaveTimerRef.current) {
+        clearTimeout(autoSaveTimerRef.current);
+        autoSaveTimerRef.current = null;
+      }
+
+      if (source === "auto") {
+        setSaveState("saving");
+      }
     },
-    onError: (error: Error) => {
-      addToast(`保存失败：${error.message}`, "error");
+    onSuccess: (_response, variables) => {
+      lastSavedSignatureRef.current = variables.signature;
+      queryClient.setQueryData(["pricing"], variables.config);
+      setSaveState("saved");
+      setLastSavedAt(new Date());
+
+      if (variables.source === "manual") {
+        addToast("定价配置已保存", "success");
+      }
+    },
+    onError: (error: Error, variables) => {
+      setSaveState("error");
+      if (variables.source === "manual") {
+        addToast(`保存失败：${error.message}`, "error");
+      }
     },
   });
 
@@ -531,16 +574,102 @@ export function Pricing() {
     );
   };
 
+  const normalizedJsonConfig = useMemo(() => {
+    if (editMode !== "json") {
+      return null;
+    }
+
+    try {
+      return normalizePricingConfig(JSON.parse(jsonValue) as PricingConfig);
+    } catch {
+      return null;
+    }
+  }, [editMode, jsonValue]);
+
+  const currentPricingConfig = useMemo(() => {
+    return editMode === "cards"
+      ? buildConfigFromRows(pricingRows)
+      : normalizedJsonConfig;
+  }, [editMode, normalizedJsonConfig, pricingRows]);
+
+  const currentPricingSignature = useMemo(() => {
+    return currentPricingConfig ? JSON.stringify(currentPricingConfig) : null;
+  }, [currentPricingConfig]);
+
+  useEffect(() => {
+    if (!hasHydratedRef.current) {
+      return;
+    }
+
+    if (editMode === "json" && normalizedJsonConfig === null) {
+      setSaveState("invalid");
+      return;
+    }
+
+    if (!currentPricingSignature) {
+      return;
+    }
+
+    if (saveMutation.isPending) {
+      return;
+    }
+
+    if (currentPricingSignature === lastSavedSignatureRef.current) {
+      if (saveState === "saving") {
+        setSaveState("saved");
+      }
+      return;
+    }
+
+    autoSaveTimerRef.current = setTimeout(() => {
+      saveMutation.mutate({
+        config: currentPricingConfig!,
+        source: "auto",
+        signature: currentPricingSignature,
+      });
+    }, AUTO_SAVE_DELAY_MS);
+
+    return () => {
+      if (autoSaveTimerRef.current) {
+        clearTimeout(autoSaveTimerRef.current);
+        autoSaveTimerRef.current = null;
+      }
+    };
+  }, [
+    currentPricingConfig,
+    currentPricingSignature,
+    editMode,
+    normalizedJsonConfig,
+    saveMutation,
+    saveState,
+  ]);
+
   const handleSave = () => {
+    if (autoSaveTimerRef.current) {
+      clearTimeout(autoSaveTimerRef.current);
+      autoSaveTimerRef.current = null;
+    }
+
     if (editMode === "cards") {
-      saveMutation.mutate(buildConfigFromRows(pricingRows));
+      const config = buildConfigFromRows(pricingRows);
+      saveMutation.mutate({
+        config,
+        source: "manual",
+        signature: JSON.stringify(config),
+      });
       return;
     }
 
     try {
       const parsed = JSON.parse(jsonValue) as PricingConfig;
-      saveMutation.mutate(normalizePricingConfig(parsed));
+      const config = normalizePricingConfig(parsed);
+      saveMutation.mutate({
+        config,
+        source: "manual",
+        signature: JSON.stringify(config),
+      });
     } catch {
+      setSaveState("invalid");
       addToast("JSON 格式错误", "error");
     }
   };
@@ -570,13 +699,26 @@ export function Pricing() {
   };
 
   const isFetching = pricingQuery.isFetching || channelsQuery.isFetching || tokensQuery.isFetching;
+  const saveHint = (() => {
+    switch (saveState) {
+      case "saving":
+        return "自动保存中...";
+      case "error":
+        return "自动保存失败";
+      case "invalid":
+        return "JSON 无法自动保存";
+      default:
+        return `保存于 ${formatSaveTime(lastSavedAt)}`;
+    }
+  })();
 
   return (
     <PageContainer
       title="定价管理"
-      description="以模型卡片集中管理全局定价，默认覆盖当前系统模型，并支持按渠道、令牌、类型与关键词快速筛选。"
+      description="展示和配置系统模型价格"
       actions={
         <div className="flex items-center gap-2">
+          <span className="hidden text-xs text-muted-foreground md:inline">{saveHint}</span>
           <Button variant="outline" size="sm" onClick={handleRefresh} disabled={isFetching}>
             <RefreshCw className={cn("h-4 w-4", isFetching && "animate-spin")} />
           </Button>

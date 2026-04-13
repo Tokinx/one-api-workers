@@ -124,6 +124,8 @@ type AdminSecurityConfig = {
     enabled: boolean;
     telegramBotToken: string;
     telegramChatId: string;
+    verifiedFingerprint: string;
+    verifiedAt: string | null;
 }
 
 type ApiDocsConfig = {

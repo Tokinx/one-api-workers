@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Bot, Check, FileText, Globe, Shield, SlidersHorizontal } from "lucide-react";
 
@@ -10,10 +10,21 @@ import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/components/ui/use-toast";
 import { BILLING_CONFIG_QUERY_KEY } from "@/hooks/use-billing-config";
 import { SYSTEM_CONFIG_QUERY_KEY, useSystemConfig } from "@/hooks/use-system-config";
-import { DEFAULT_SYSTEM_CONFIG, normalizeSystemConfig, PRECISION_OPTIONS } from "@/lib/system-config";
 import { PageContainer } from "@/components/ui/page-container";
+import {
+  DEFAULT_SYSTEM_CONFIG,
+  PRECISION_OPTIONS,
+  clearTelegramSecurityVerification,
+  isTelegramSecurityVerified,
+  normalizeSystemConfig,
+} from "@/lib/system-config";
+import type { SystemConfig } from "@/types";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "";
+const AUTO_SAVE_DELAY_MS = 800;
+
+type SaveSource = "auto" | "manual";
+type SaveState = "idle" | "saving" | "saved" | "error";
 
 const buildAbsoluteUrl = (pathname: string): string => {
   if (typeof window === "undefined") {
@@ -21,48 +32,153 @@ const buildAbsoluteUrl = (pathname: string): string => {
   }
 
   const baseUrl = API_BASE_URL ? new URL(API_BASE_URL, window.location.origin) : new URL(window.location.origin);
-
   return new URL(pathname, baseUrl).toString();
+};
+
+const buildSystemConfigSignature = (config: SystemConfig): string => {
+  return JSON.stringify(normalizeSystemConfig(config));
+};
+
+const formatSaveTime = (value: Date | null): string => {
+  if (!value) {
+    return "--:--:--";
+  }
+
+  const hours = String(value.getHours()).padStart(2, "0");
+  const minutes = String(value.getMinutes()).padStart(2, "0");
+  const seconds = String(value.getSeconds()).padStart(2, "0");
+  return `${hours}:${minutes}:${seconds}`;
 };
 
 export function SystemSettings() {
   const [systemConfig, setSystemConfig] = useState(DEFAULT_SYSTEM_CONFIG);
+  const [saveState, setSaveState] = useState<SaveState>("idle");
+  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
 
   const { addToast } = useToast();
   const queryClient = useQueryClient();
   const systemConfigQuery = useSystemConfig();
+  const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hasHydratedRef = useRef(false);
+  const lastSavedSignatureRef = useRef(buildSystemConfigSignature(DEFAULT_SYSTEM_CONFIG));
+  const currentSignatureRef = useRef(buildSystemConfigSignature(DEFAULT_SYSTEM_CONFIG));
+
+  const normalizedSystemConfig = useMemo(() => normalizeSystemConfig(systemConfig), [systemConfig]);
+  const currentSignature = useMemo(() => buildSystemConfigSignature(normalizedSystemConfig), [normalizedSystemConfig]);
 
   useEffect(() => {
-    if (systemConfigQuery.data) {
-      setSystemConfig(normalizeSystemConfig(systemConfigQuery.data));
+    currentSignatureRef.current = currentSignature;
+  }, [currentSignature]);
+
+  useEffect(() => {
+    if (!systemConfigQuery.isFetched || !systemConfigQuery.data) {
+      return;
     }
-  }, [systemConfigQuery.data]);
+
+    const normalized = normalizeSystemConfig(systemConfigQuery.data);
+    lastSavedSignatureRef.current = buildSystemConfigSignature(normalized);
+    hasHydratedRef.current = true;
+    setSaveState("idle");
+    setLastSavedAt(new Date());
+    setSystemConfig(normalized);
+  }, [systemConfigQuery.data, systemConfigQuery.isFetched]);
 
   const saveSystemConfigMutation = useMutation({
-    mutationFn: async () => apiClient.saveSystemConfig(normalizeSystemConfig(systemConfig)),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: SYSTEM_CONFIG_QUERY_KEY });
-      queryClient.invalidateQueries({ queryKey: BILLING_CONFIG_QUERY_KEY });
-      addToast("系统设置已保存", "success");
+    mutationFn: async ({ config }: { config: SystemConfig; source: SaveSource; signature: string }) =>
+      apiClient.saveSystemConfig(config),
+    onMutate: ({ source }) => {
+      if (autoSaveTimerRef.current) {
+        clearTimeout(autoSaveTimerRef.current);
+        autoSaveTimerRef.current = null;
+      }
+
+      if (source === "auto") {
+        setSaveState("saving");
+      }
     },
-    onError: (error: Error) => {
-      addToast(`保存失败：${error.message}`, "error");
+    onSuccess: (response, variables) => {
+      const savedConfig = normalizeSystemConfig((response.data as SystemConfig | undefined) ?? variables.config);
+      const savedSignature = buildSystemConfigSignature(savedConfig);
+
+      lastSavedSignatureRef.current = savedSignature;
+      queryClient.setQueryData(SYSTEM_CONFIG_QUERY_KEY, savedConfig);
+      queryClient.setQueryData(BILLING_CONFIG_QUERY_KEY, {
+        displayDecimals: savedConfig.displayDecimals,
+      });
+
+      if (variables.signature === currentSignatureRef.current) {
+        setSystemConfig(savedConfig);
+      }
+
+      setSaveState("saved");
+      setLastSavedAt(new Date());
+
+      if (variables.source === "manual") {
+        addToast("系统设置已保存", "success");
+      }
+    },
+    onError: (error: Error, variables) => {
+      setSaveState("error");
+      if (variables.source === "manual") {
+        addToast(`保存失败：${error.message}`, "error");
+      }
     },
   });
 
   const telegramTestMutation = useMutation({
     mutationFn: async () =>
       apiClient.sendTelegramTestMessage({
-        telegramBotToken: systemConfig.adminSecurity.telegramBotToken,
-        telegramChatId: systemConfig.adminSecurity.telegramChatId,
+        telegramBotToken: normalizedSystemConfig.adminSecurity.telegramBotToken,
+        telegramChatId: normalizedSystemConfig.adminSecurity.telegramChatId,
       }),
-    onSuccess: () => {
+    onSuccess: (response) => {
+      const verification = response.data;
+      setSystemConfig((current) => ({
+        ...current,
+        adminSecurity: {
+          ...current.adminSecurity,
+          verifiedFingerprint: verification?.verifiedFingerprint || "",
+          verifiedAt: verification?.verifiedAt || null,
+        },
+      }));
       addToast("测试消息已发送，请到 Telegram 查收", "success");
     },
     onError: (error: Error) => {
       addToast(`测试失败：${error.message}`, "error");
     },
   });
+
+  useEffect(() => {
+    if (!hasHydratedRef.current) {
+      return;
+    }
+
+    if (saveSystemConfigMutation.isPending) {
+      return;
+    }
+
+    if (currentSignature === lastSavedSignatureRef.current) {
+      if (saveState === "saving") {
+        setSaveState("saved");
+      }
+      return;
+    }
+
+    autoSaveTimerRef.current = setTimeout(() => {
+      saveSystemConfigMutation.mutate({
+        config: normalizedSystemConfig,
+        source: "auto",
+        signature: currentSignature,
+      });
+    }, AUTO_SAVE_DELAY_MS);
+
+    return () => {
+      if (autoSaveTimerRef.current) {
+        clearTimeout(autoSaveTimerRef.current);
+        autoSaveTimerRef.current = null;
+      }
+    };
+  }, [currentSignature, normalizedSystemConfig, saveState, saveSystemConfigMutation]);
 
   const docsLinks = useMemo(
     () => [
@@ -73,43 +189,95 @@ export function SystemSettings() {
     [],
   );
 
-  const currentPrecisionOption = PRECISION_OPTIONS.find((option) => option.value === systemConfig.displayDecimals);
+  const currentPrecisionOption = PRECISION_OPTIONS.find(
+    (option) => option.value === normalizedSystemConfig.displayDecimals,
+  );
   const telegramConfigComplete =
-    systemConfig.adminSecurity.telegramBotToken.trim().length > 0 &&
-    systemConfig.adminSecurity.telegramChatId.trim().length > 0;
-  const securityEnabled = systemConfig.adminSecurity.enabled && telegramConfigComplete;
+    normalizedSystemConfig.adminSecurity.telegramBotToken.trim().length > 0 &&
+    normalizedSystemConfig.adminSecurity.telegramChatId.trim().length > 0;
+  const telegramSecurityVerified = isTelegramSecurityVerified(normalizedSystemConfig.adminSecurity);
+
+  const saveHint = (() => {
+    switch (saveState) {
+      case "saving":
+        return "自动保存中...";
+      case "error":
+        return "自动保存失败";
+      default:
+        return `保存于 ${formatSaveTime(lastSavedAt)}`;
+    }
+  })();
+
+  const updateTelegramField = (field: "telegramBotToken" | "telegramChatId", value: string) => {
+    setSystemConfig((current) => {
+      const previousValue = current.adminSecurity[field];
+      if (previousValue === value) {
+        return current;
+      }
+
+      return {
+        ...current,
+        adminSecurity: clearTelegramSecurityVerification({
+          ...current.adminSecurity,
+          [field]: value,
+        }),
+      };
+    });
+  };
+
+  const handleManualSave = () => {
+    if (autoSaveTimerRef.current) {
+      clearTimeout(autoSaveTimerRef.current);
+      autoSaveTimerRef.current = null;
+    }
+
+    saveSystemConfigMutation.mutate({
+      config: normalizedSystemConfig,
+      source: "manual",
+      signature: currentSignature,
+    });
+  };
 
   return (
     <PageContainer
       title="系统设置"
-      description="统一管理全局系统设置。"
+      description="统一管理全局系统设置"
       actions={
-        <Button
-          size="sm"
-          onClick={() => saveSystemConfigMutation.mutate()}
-          disabled={saveSystemConfigMutation.isPending || systemConfigQuery.isLoading}
-        >
-          <Check className="mr-1 h-4 w-4" />
-          保存
-        </Button>
+        <div className="flex items-center gap-3">
+          <span className="text-xs text-muted-foreground">{saveHint}</span>
+          <Button
+            size="sm"
+            onClick={handleManualSave}
+            disabled={saveSystemConfigMutation.isPending || systemConfigQuery.isLoading}
+          >
+            <Check className="mr-1 h-4 w-4" />
+            保存
+          </Button>
+        </div>
       }
     >
       <Card className="space-y-6 border-0 p-6">
         <section className="space-y-4">
           <div className="flex items-start gap-3">
-            <div className="mt-0.5 rounded-lg bg-primary/10 p-2 text-primary">
+            <div className="mt-0.5 rounded-lg bg-muted-foreground/10 p-2 text-muted-foreground">
               <Shield className="h-4 w-4" />
             </div>
             <div className="min-w-0 flex-1">
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <h3 className="font-bold tracking-tight">安全设置</h3>
-                  <p className="text-sm text-muted-foreground">
-                    绑定 Telegram 后自动开启登录验证和通知功能。
-                  </p>
+
+                  {!telegramSecurityVerified && telegramConfigComplete ? (
+                    <p className="text-sm text-amber-600 dark:text-amber-300">
+                      当前 Telegram 配置尚未验证，安全开关保持关闭。
+                    </p>
+                  ) : (
+                    <p className="text-sm text-green-600 dark:text-green-300">Telegram 配置已验证，安全开关已开启。</p>
+                  )}
                 </div>
                 <Switch
-                  checked={systemConfig.adminSecurity.enabled}
+                  checked={normalizedSystemConfig.adminSecurity.enabled}
+                  disabled={!telegramConfigComplete || !telegramSecurityVerified}
                   onCheckedChange={(checked) =>
                     setSystemConfig((current) => ({
                       ...current,
@@ -133,16 +301,8 @@ export function SystemSettings() {
                 id="telegramBotToken"
                 type="password"
                 placeholder="123456789:AA..."
-                value={systemConfig.adminSecurity.telegramBotToken}
-                onChange={(event) =>
-                  setSystemConfig((current) => ({
-                    ...current,
-                    adminSecurity: {
-                      ...current.adminSecurity,
-                      telegramBotToken: event.target.value,
-                    },
-                  }))
-                }
+                value={normalizedSystemConfig.adminSecurity.telegramBotToken}
+                onChange={(event) => updateTelegramField("telegramBotToken", event.target.value)}
               />
             </div>
 
@@ -153,16 +313,8 @@ export function SystemSettings() {
               <Input
                 id="telegramChatId"
                 placeholder="-1001234567890"
-                value={systemConfig.adminSecurity.telegramChatId}
-                onChange={(event) =>
-                  setSystemConfig((current) => ({
-                    ...current,
-                    adminSecurity: {
-                      ...current.adminSecurity,
-                      telegramChatId: event.target.value,
-                    },
-                  }))
-                }
+                value={normalizedSystemConfig.adminSecurity.telegramChatId}
+                onChange={(event) => updateTelegramField("telegramChatId", event.target.value)}
               />
             </div>
           </div>
@@ -176,10 +328,10 @@ export function SystemSettings() {
                 </div>
                 <p className="text-sm text-muted-foreground">
                   {!telegramConfigComplete
-                    ? "请确保 Telegram Bot Token 和 Chat ID 已正确填写，测试通过后将启用登录验证和通知功能。"
-                    : securityEnabled
-                      ? "当前已开启 Telegram 登录验证，管理员必须输入验证码才能登录。"
-                      : "Telegram 已配置但尚未启用。可以先发送测试消息确认，再决定是否开启登录验证。"}
+                    ? "请先填写完整的 Bot Token 和 Chat ID。"
+                    : telegramSecurityVerified
+                      ? `最近一次验证通过时间：${normalizedSystemConfig.adminSecurity.verifiedAt || "--"}`
+                      : "测试通过后，安全开关才会解锁。"}
                 </p>
               </div>
 
@@ -199,22 +351,22 @@ export function SystemSettings() {
 
         <section className="flex items-center gap-3">
           <div className="flex items-start gap-3">
-            <div className="mt-0.5 rounded-lg bg-primary/10 p-2 text-primary">
+            <div className="mt-0.5 rounded-lg bg-muted-foreground/10 p-2 text-muted-foreground">
               <SlidersHorizontal className="h-4 w-4" />
             </div>
             <div className="min-w-0 flex-1">
               <h3 className="font-bold tracking-tight">显示精度设置</h3>
               <p className="text-sm text-muted-foreground">
-                页面显示金额保留 {systemConfig.displayDecimals} 位小数， 示例：$
-                {(0).toFixed(systemConfig.displayDecimals)}
+                页面显示金额保留 {normalizedSystemConfig.displayDecimals} 位小数，示例：$
+                {(0).toFixed(normalizedSystemConfig.displayDecimals)}
                 {currentPrecisionOption ? `（当前：${currentPrecisionOption.label}）` : ""}
               </p>
             </div>
           </div>
           <div className="flex-1" />
-          <div className="inline-flex flex-wrap border rounded-md">
+          <div className="inline-flex flex-wrap rounded-md border">
             {PRECISION_OPTIONS.map((option) => {
-              const isActive = systemConfig.displayDecimals === option.value;
+              const isActive = normalizedSystemConfig.displayDecimals === option.value;
               return (
                 <Button
                   key={option.value}
@@ -239,7 +391,7 @@ export function SystemSettings() {
 
         <section className="space-y-4">
           <div className="flex items-start gap-3">
-            <div className="mt-0.5 rounded-lg bg-primary/10 p-2 text-primary">
+            <div className="mt-0.5 rounded-lg bg-muted-foreground/10 p-2 text-muted-foreground">
               <FileText className="h-4 w-4" />
             </div>
             <div className="min-w-0 flex-1">
@@ -251,7 +403,7 @@ export function SystemSettings() {
                   </p>
                 </div>
                 <Switch
-                  checked={systemConfig.apiDocs.enabled}
+                  checked={normalizedSystemConfig.apiDocs.enabled}
                   onCheckedChange={(checked) =>
                     setSystemConfig((current) => ({
                       ...current,
@@ -266,7 +418,7 @@ export function SystemSettings() {
             </div>
           </div>
 
-          {systemConfig.apiDocs.enabled ? (
+          {normalizedSystemConfig.apiDocs.enabled ? (
             <div className="grid gap-3 lg:grid-cols-3">
               {docsLinks.map((item) => (
                 <div
@@ -285,9 +437,7 @@ export function SystemSettings() {
                 </div>
               ))}
             </div>
-          ) : (
-            ""
-          )}
+          ) : null}
         </section>
       </Card>
     </PageContainer>

@@ -4,6 +4,7 @@ import { z } from "zod";
 
 import { CommonErrorResponse, CommonSuccessfulResponse } from "../model";
 import {
+    buildTelegramVerificationFingerprint,
     getSystemConfig,
     isTelegramSecurityEnabled,
     normalizeAdminSecurityConfig,
@@ -16,6 +17,8 @@ const adminSecurityConfigSchema = z.object({
     enabled: z.boolean(),
     telegramBotToken: z.string(),
     telegramChatId: z.string(),
+    verifiedFingerprint: z.string(),
+    verifiedAt: z.nullable(z.string()),
 });
 
 const apiDocsConfigSchema = z.object({
@@ -31,6 +34,11 @@ const systemConfigSchema = z.object({
 const telegramTestRequestSchema = z.object({
     telegramBotToken: z.string().trim().min(1, "Bot Token 不能为空"),
     telegramChatId: z.string().trim().min(1, "Chat ID 不能为空"),
+});
+
+const telegramTestResponseSchema = z.object({
+    verifiedFingerprint: z.string(),
+    verifiedAt: z.string(),
 });
 
 const ensureSystemConfigValid = (config: SystemConfig) => {
@@ -114,7 +122,7 @@ export class TelegramTestMessageEndpoint extends OpenAPIRoute {
             },
         },
         responses: {
-            ...CommonSuccessfulResponse(z.boolean()),
+            ...CommonSuccessfulResponse(telegramTestResponseSchema),
             ...CommonErrorResponse,
         },
     };
@@ -148,7 +156,13 @@ export class TelegramTestMessageEndpoint extends OpenAPIRoute {
 
         return {
             success: true,
-            data: true,
+            data: {
+                verifiedFingerprint: buildTelegramVerificationFingerprint(
+                    securityConfig.telegramBotToken,
+                    securityConfig.telegramChatId
+                ),
+                verifiedAt: new Date().toISOString(),
+            },
             message: "Telegram test message sent successfully",
         } as CommonResponse;
     }
