@@ -177,6 +177,7 @@ export interface AnalyticsEventItem {
   cachedTokens: number
   totalTokens: number
   totalCost: number
+  cacheCost: number
   latencyMs: number
   retryCount: number
   upstreamStatus: number

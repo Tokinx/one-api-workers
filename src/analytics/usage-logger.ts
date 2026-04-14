@@ -27,6 +27,7 @@ export type UsageLogContext = {
 
 type UsageCostResult = {
     totalCost: number;
+    cacheCost: number;
 }
 
 type FailureLogParams = {
@@ -188,7 +189,7 @@ export const buildUsageRequestMetadata = (c: Context<HonoCustomType>) => {
 const buildCommonPoint = (
     context: UsageLogContext,
     usage: Usage,
-    totalCost: number,
+    costResult: UsageCostResult,
     result: "success" | "failure",
     errorCode: string,
     errorSummary: string
@@ -230,12 +231,13 @@ const buildCommonPoint = (
             completionTokens,
             cachedTokens,
             totalTokens,
-            safeNumber(totalCost),
+            safeNumber(costResult.totalCost),
             Math.max(0, Date.now() - context.startedAt),
             safeNumber(context.trackingState.retryCount),
             upstreamStatus,
             result === "success" ? 1 : 0,
             BILLING_RAW_SCALE,
+            safeNumber(costResult.cacheCost),
         ],
     };
 };
@@ -246,7 +248,7 @@ export const writeUsageSuccessEvent = (
     usage: Usage,
     costResult: UsageCostResult
 ) => {
-    writeDataPoint(c, buildCommonPoint(context, usage, costResult.totalCost, "success", "", ""));
+    writeDataPoint(c, buildCommonPoint(context, usage, costResult, "success", "", ""));
 };
 
 export const writeUsageFailureEvent = (
@@ -259,7 +261,10 @@ export const writeUsageFailureEvent = (
         buildCommonPoint(
             context,
             {},
-            0,
+            {
+                totalCost: 0,
+                cacheCost: 0,
+            },
             "failure",
             params.errorCode,
             params.errorSummary || context.trackingState.errorSummary || ""

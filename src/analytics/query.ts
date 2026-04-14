@@ -131,6 +131,7 @@ const DOUBLE_FIELDS = {
     upstreamStatus: "double8",
     successFlag: "double9",
     billingScale: "double10",
+    cacheCost: "double11",
 } as const;
 
 const BREAKDOWN_FIELDS: Record<AnalyticsBreakdownDimension, string> = {
@@ -197,6 +198,7 @@ const USAGE_LOG_NUMERIC_COLUMNS = [
     DOUBLE_FIELDS.upstreamStatus,
     DOUBLE_FIELDS.successFlag,
     DOUBLE_FIELDS.billingScale,
+    DOUBLE_FIELDS.cacheCost,
 ];
 
 const ALL_PROBED_COLUMNS = [
@@ -538,16 +540,19 @@ const buildDoubleSelect = (
         : `0 AS ${alias}`;
 };
 
-const buildNormalizedTotalCostExpression = (support: DatasetColumnSupport): string => {
-    if (!isColumnAvailable(support, DOUBLE_FIELDS.totalCost)) {
+const buildNormalizedCostExpression = (
+    support: DatasetColumnSupport,
+    costField: string
+): string => {
+    if (!isColumnAvailable(support, costField)) {
         return "0";
     }
 
     if (!isColumnAvailable(support, DOUBLE_FIELDS.billingScale)) {
-        return `${DOUBLE_FIELDS.totalCost} * ${LEGACY_TO_RAW_FACTOR}`;
+        return `${costField} * ${LEGACY_TO_RAW_FACTOR}`;
     }
 
-    return `if(${DOUBLE_FIELDS.billingScale} > 0, ${DOUBLE_FIELDS.totalCost} * (${BILLING_RAW_SCALE} / ${DOUBLE_FIELDS.billingScale}), ${DOUBLE_FIELDS.totalCost} * ${LEGACY_TO_RAW_FACTOR})`;
+    return `if(${DOUBLE_FIELDS.billingScale} > 0, ${costField} * (${BILLING_RAW_SCALE} / ${DOUBLE_FIELDS.billingScale}), ${costField} * ${LEGACY_TO_RAW_FACTOR})`;
 };
 
 const hasAnyLegacyLogSchema = (support: DatasetColumnSupport): boolean => {
@@ -624,7 +629,7 @@ export const queryUsageOverview = async (
     const { range, config } = getRangeConfig(requestedRange);
     const dataset = getDatasetName(c);
     const columnSupport = await getDatasetColumnSupport(c, dataset, buildRangeWhereClause(config));
-    const normalizedTotalCostExpression = buildNormalizedTotalCostExpression(columnSupport);
+    const normalizedTotalCostExpression = buildNormalizedCostExpression(columnSupport, DOUBLE_FIELDS.totalCost);
     const rows = await runAnalyticsQuery<Record<string, unknown>>(c, `
 SELECT
     sum(_sample_interval) AS requests,
@@ -666,7 +671,7 @@ export const queryUsageTrend = async (
     const dataset = getDatasetName(c);
     const trendWindow = buildTrendWindow(range, config);
     const columnSupport = await getDatasetColumnSupport(c, dataset, trendWindow.whereClause);
-    const normalizedTotalCostExpression = buildNormalizedTotalCostExpression(columnSupport);
+    const normalizedTotalCostExpression = buildNormalizedCostExpression(columnSupport, DOUBLE_FIELDS.totalCost);
     const rows = await runAnalyticsQuery<Record<string, unknown>>(c, `
 SELECT
     toUnixTimestamp(${buildBucketClause(config)}) AS bucket_ts,
@@ -716,7 +721,7 @@ export const queryUsageBreakdown = async (
     const dataset = getDatasetName(c);
     const dimensionField = BREAKDOWN_FIELDS[dimension];
     const columnSupport = await getDatasetColumnSupport(c, dataset, buildRangeWhereClause(config));
-    const normalizedTotalCostExpression = buildNormalizedTotalCostExpression(columnSupport);
+    const normalizedTotalCostExpression = buildNormalizedCostExpression(columnSupport, DOUBLE_FIELDS.totalCost);
     const rows = await runAnalyticsQuery<Record<string, unknown>>(c, `
 SELECT
     ${dimensionField} AS label,
@@ -785,6 +790,8 @@ WHERE ${buildRangeWhereClause(config)}
 
     const columnSupport = await getDatasetColumnSupport(c, dataset, buildRangeWhereClause(config));
     const compatibilityWarning = getUsageLogCompatibilityWarning(columnSupport);
+    const normalizedTotalCostExpression = buildNormalizedCostExpression(columnSupport, DOUBLE_FIELDS.totalCost);
+    const normalizedCacheCostExpression = buildNormalizedCostExpression(columnSupport, DOUBLE_FIELDS.cacheCost);
     const rows = await runAnalyticsQuery<Record<string, unknown>>(c, `
 SELECT
     timestamp,
@@ -812,7 +819,8 @@ SELECT
     ${buildDoubleSelect(columnSupport, DOUBLE_FIELDS.completionTokens, "completion_tokens")},
     ${buildDoubleSelect(columnSupport, DOUBLE_FIELDS.cachedTokens, "cached_tokens")},
     ${buildDoubleSelect(columnSupport, DOUBLE_FIELDS.totalTokens, "total_tokens")},
-    ${buildNormalizedTotalCostExpression(columnSupport)} AS total_cost,
+    ${normalizedTotalCostExpression} AS total_cost,
+    ${normalizedCacheCostExpression} AS cache_cost,
     ${buildDoubleSelect(columnSupport, DOUBLE_FIELDS.latencyMs, "latency_ms")},
     ${buildDoubleSelect(columnSupport, DOUBLE_FIELDS.retryCount, "retry_count")},
     ${buildDoubleSelect(columnSupport, DOUBLE_FIELDS.upstreamStatus, "upstream_status")}
@@ -853,6 +861,7 @@ LIMIT ${limit}
             cachedTokens: toNumber(row.cached_tokens),
             totalTokens: toNumber(row.total_tokens),
             totalCost: toNumber(row.total_cost),
+            cacheCost: toNumber(row.cache_cost),
             latencyMs: toNumber(row.latency_ms),
             retryCount: toNumber(row.retry_count),
             upstreamStatus: toNumber(row.upstream_status),
@@ -958,6 +967,8 @@ WHERE ${whereClause}
         };
     }
 
+    const normalizedTotalCostExpression = buildNormalizedCostExpression(columnSupport, DOUBLE_FIELDS.totalCost);
+    const normalizedCacheCostExpression = buildNormalizedCostExpression(columnSupport, DOUBLE_FIELDS.cacheCost);
     const rows = await runAnalyticsQuery<Record<string, unknown>>(c, `
 SELECT
     timestamp,
@@ -985,7 +996,8 @@ SELECT
     ${buildDoubleSelect(columnSupport, DOUBLE_FIELDS.completionTokens, "completion_tokens")},
     ${buildDoubleSelect(columnSupport, DOUBLE_FIELDS.cachedTokens, "cached_tokens")},
     ${buildDoubleSelect(columnSupport, DOUBLE_FIELDS.totalTokens, "total_tokens")},
-    ${buildNormalizedTotalCostExpression(columnSupport)} AS total_cost,
+    ${normalizedTotalCostExpression} AS total_cost,
+    ${normalizedCacheCostExpression} AS cache_cost,
     ${buildDoubleSelect(columnSupport, DOUBLE_FIELDS.latencyMs, "latency_ms")},
     ${buildDoubleSelect(columnSupport, DOUBLE_FIELDS.retryCount, "retry_count")},
     ${buildDoubleSelect(columnSupport, DOUBLE_FIELDS.upstreamStatus, "upstream_status")}
@@ -1038,6 +1050,7 @@ OFFSET ${offset}
             cachedTokens: toNumber(row.cached_tokens),
             totalTokens: toNumber(row.total_tokens),
             totalCost: toNumber(row.total_cost),
+            cacheCost: toNumber(row.cache_cost),
             latencyMs: toNumber(row.latency_ms),
             retryCount: toNumber(row.retry_count),
             upstreamStatus: toNumber(row.upstream_status),

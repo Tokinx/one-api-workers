@@ -469,8 +469,8 @@ export function UsageLogs() {
                       <td className="px-2 py-3">
                         {/* <div className="font-medium">{formatCompactNumber(item.totalTokens)} tokens</div> */}
                         <div className="text-xs text-muted-foreground">
-                          输入 {formatCompactNumber(item.promptTokens)} / 输出{" "}
-                          {formatCompactNumber(item.completionTokens)}
+                          {formatCompactNumber(item.promptTokens)} / {formatCompactNumber(item.completionTokens)} /{" "}
+                          {formatCompactNumber(item.cachedTokens)}
                         </div>
                         <div className="mt-1 text-xs text-muted-foreground">
                           {formatCurrency(item.totalCost, displayDecimals)}
@@ -631,6 +631,7 @@ export function UsageLogs() {
                 <div className="grid gap-x-8 border-t border-border/60 pt-2 md:grid-cols-2">
                   <div className="divide-y divide-border/60">
                     <DetailRow label="总成本" value={formatCurrency(selectedItem.totalCost, displayDecimals)} />
+                    <DetailRow label="缓存成本" value={formatCurrency(selectedItem.cacheCost, displayDecimals)} />
                     <DetailRow label="延迟" value={formatDuration(selectedItem.latencyMs)} />
                     <DetailRow label="总 Tokens" value={formatCompactNumber(selectedItem.totalTokens)} />
                   </div>
