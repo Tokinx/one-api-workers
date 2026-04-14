@@ -265,14 +265,15 @@ export function SystemSettings() {
             <div className="min-w-0 flex-1">
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <h3 className="font-bold tracking-tight">安全设置</h3>
-
-                  {!telegramSecurityVerified && telegramConfigComplete ? (
+                  <h3 className="font-bold tracking-tight">Telegram 安全设置</h3>
+                  {!normalizedSystemConfig.adminSecurity.enabled && telegramConfigComplete ? (
                     <p className="text-sm text-amber-600 dark:text-amber-300">
-                      当前 Telegram 配置尚未验证，安全开关保持关闭。
+                      发送测试消息，验证通过后即可开启 Telegram 安全设置。
                     </p>
+                  ) : telegramSecurityVerified ? (
+                    <p className="text-sm text-green-600 dark:text-green-300">已开启 Telegram 登录验证与登录通知。</p>
                   ) : (
-                    <p className="text-sm text-green-600 dark:text-green-300">Telegram 配置已验证，安全开关已开启。</p>
+                    <p className="text-sm text-muted-foreground">绑定 Telegram，开启登录验证与登录通知。</p>
                   )}
                 </div>
                 <Switch
@@ -301,6 +302,7 @@ export function SystemSettings() {
                 id="telegramBotToken"
                 type="password"
                 placeholder="123456789:AA..."
+                autoComplete="new-password"
                 value={normalizedSystemConfig.adminSecurity.telegramBotToken}
                 onChange={(event) => updateTelegramField("telegramBotToken", event.target.value)}
               />
