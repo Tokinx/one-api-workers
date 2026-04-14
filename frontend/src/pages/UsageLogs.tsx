@@ -1,10 +1,17 @@
 import { startTransition, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "@/api/client";
-import { AnalyticsEventItem, AnalyticsRange, UsageLogFilterDimension, UsageLogFilters, UsageLogSearchData } from "@/types";
+import {
+  AnalyticsEventItem,
+  AnalyticsRange,
+  UsageLogFilterDimension,
+  UsageLogFilters,
+  UsageLogSearchData,
+} from "@/types";
 import { PageContainer } from "@/components/ui/page-container";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -164,13 +171,63 @@ const ClientSummary = ({ item }: { item: AnalyticsEventItem }) => {
   );
 };
 
-const DetailField = ({ label, value, mono = false }: { label: string; value: string | number; mono?: boolean }) => {
-  const text = String(value || "--");
+const formatDetailValue = (value: string | number | null | undefined): string => {
+  if (value === null || value === undefined) {
+    return "--";
+  }
+
+  if (typeof value === "string" && value.trim().length === 0) {
+    return "--";
+  }
+
+  return String(value);
+};
+
+const DetailMetric = ({ label, value }: { label: string; value: string | number }) => {
+  const text = formatDetailValue(value);
 
   return (
-    <div className="rounded-lg border bg-muted/20 p-3">
-      <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{label}</div>
-      <div className={cn("mt-1 text-sm text-foreground break-all", mono && "font-mono text-xs")}>{text}</div>
+    <div className="flex items-start justify-between gap-4 border-b border-white/10 py-2.5 last:border-b-0">
+      <div className="text-xs font-medium uppercase text-slate-300">{label}</div>
+      <div className={cn("text-right text-slate-50 break-all font-mono text-xs")}>{text}</div>
+    </div>
+  );
+};
+
+const DetailSection = ({ title, children }: { title: string; children: React.ReactNode }) => {
+  return (
+    <section className="space-y-2">
+      <div className="text-sm uppercase text-slate-600 font-bold">{title}</div>
+      {children}
+    </section>
+  );
+};
+
+const DetailRow = ({
+  label,
+  value,
+  mono = false,
+  tone = "default",
+}: {
+  label: string;
+  value: string | number;
+  mono?: boolean;
+  tone?: "default" | "success" | "danger" | "subtle";
+}) => {
+  const text = formatDetailValue(value);
+  const toneClassName =
+    tone === "success"
+      ? "text-emerald-600 dark:text-emerald-400"
+      : tone === "danger"
+        ? "text-rose-600 dark:text-rose-400"
+        : tone === "subtle"
+          ? "text-muted-foreground"
+          : "text-foreground";
+
+  return (
+    <div className="grid gap-1 py-2.5 sm:grid-cols-[112px_minmax(0,1fr)] sm:gap-4">
+      <div className="text-xs font-medium text-muted-foreground">{label}</div>
+      <div className={cn("break-all", toneClassName, "font-mono text-xs")}>{text}</div>
     </div>
   );
 };
@@ -188,12 +245,8 @@ export function UsageLogs() {
     () => hydrateUsageLogFilters(cachedLogsSnapshot?.data.appliedFilters, defaultFilters),
     [cachedLogsSnapshot, defaultFilters],
   );
-  const [draftFilters, setDraftFilters] = useState<UsageLogFilterState>(
-    () => initialDraftFilters,
-  );
-  const [appliedFilters, setAppliedFilters] = useState<UsageLogFilterState>(
-    () => initialAppliedFilters,
-  );
+  const [draftFilters, setDraftFilters] = useState<UsageLogFilterState>(() => initialDraftFilters);
+  const [appliedFilters, setAppliedFilters] = useState<UsageLogFilterState>(() => initialAppliedFilters);
   const [currentPage, setCurrentPage] = useState(() => cachedLogsSnapshot?.data.currentPage ?? 1);
   const [selectedItem, setSelectedItem] = useState<AnalyticsEventItem | null>(null);
   const initialLogsData =
@@ -270,28 +323,6 @@ export function UsageLogs() {
       }
     >
       <div className="space-y-6">
-        {/* <Card className="overflow-hidden border-0 bg-gradient-to-br from-slate-950 to-slate-900 text-slate-50">
-          <CardContent className="p-6">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-              <div className="max-w-2xl">
-                <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/6 px-3 py-1 text-xs uppercase tracking-[0.18em] text-slate-300">
-                  <ShieldAlert className="h-3.5 w-3.5" />
-                  Diagnostics
-                </div>
-                <h2 className="mt-4 text-2xl font-semibold tracking-tight">面向排障的请求日志视图</h2>
-                <p className="mt-2 text-sm leading-6 text-slate-300">
-                  记录 request id、trace id、错误摘要、IP、UA 与地理位置，适合定位某一批异常设备或单个失败链路。
-                </p>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <Button variant="secondary" size="sm" onClick={() => applyPreset(24)}>最近 24 小时</Button>
-                <Button variant="secondary" size="sm" onClick={() => applyPreset(24 * 7)}>最近 7 天</Button>
-                <Button variant="secondary" size="sm" onClick={() => applyPreset(24 * 30)}>最近 30 天</Button>
-              </div>
-            </div>
-          </CardContent>
-        </Card> */}
-
         <Card>
           <CardContent className="pt-6 space-y-4">
             {logsQuery.data?.compatibilityWarning && (
@@ -374,208 +405,284 @@ export function UsageLogs() {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader className="pb-4">
-            <CardTitle className="text-lg">日志结果</CardTitle>
-            <CardDescription>日志可能存在 30 秒左右的延迟</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {logsQuery.isLoading ? (
-              <div className="flex items-center justify-center py-16 text-sm text-muted-foreground">日志加载中...</div>
-            ) : logsQuery.data?.items.length ? (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b text-left text-xs uppercase tracking-wide text-muted-foreground">
-                      <th className="px-2 py-3 font-medium">时间</th>
-                      <th className="px-2 py-3 font-medium">模型 / 令牌</th>
-                      <th className="px-2 py-3 font-medium">端点 / 渠道</th>
-                      <th className="px-2 py-3 font-medium">结果 / 状态</th>
-                      <th className="px-2 py-3 font-medium">方式 / 用时</th>
-                      <th className="px-2 py-3 font-medium">资源消耗</th>
-                      <th className="px-2 py-3 font-medium text-right">详情</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {logsQuery.data.items.map((item) => (
-                      <tr
-                        key={`${item.requestId || item.timestamp}-${item.traceId || item.channelKey}`}
-                        className="border-b align-top last:border-0"
-                      >
-                        <td className="px-2 py-3">
-                          <div className="text-xs text-muted-foreground">{formatDateTime(item.timestamp)}</div>
-                          <div className="mt-1 text-xs text-muted-foreground">{item.requestId || "--"}</div>
-                        </td>
+        <Card className="p-6 pt-4">
+          {logsQuery.isLoading ? (
+            <div className="flex items-center justify-center py-16 text-sm text-muted-foreground">日志加载中...</div>
+          ) : logsQuery.data?.items.length ? (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b text-left text-xs uppercase tracking-wide text-muted-foreground">
+                    <th className="px-2 py-3 font-medium">时间</th>
+                    <th className="px-2 py-3 font-medium">模型 / 令牌</th>
+                    <th className="px-2 py-3 font-medium">端点 / 渠道</th>
+                    <th className="px-2 py-3 font-medium">结果 / 状态</th>
+                    <th className="px-2 py-3 font-medium">方式 / 用时</th>
+                    <th className="px-2 py-3 font-medium">资源消耗</th>
+                    <th className="px-2 py-3 font-medium text-right">详情</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {logsQuery.data.items.map((item) => (
+                    <tr
+                      key={`${item.requestId || item.timestamp}-${item.traceId || item.channelKey}`}
+                      className="border-b align-top last:border-0"
+                    >
+                      <td className="px-2 py-3">
+                        <div className="text-xs text-muted-foreground">{formatDateTime(item.timestamp)}</div>
+                        <div className="mt-1 text-xs text-muted-foreground">{item.requestId || "--"}</div>
+                      </td>
 
-                        <td className="px-2 py-3">
-                          <div className="text-xs text-muted-foreground">{item.requestedModel || "--"}</div>
-                          <div className="mt-1 text-xs text-muted-foreground">{item.tokenName || "未命名令牌"}</div>
-                        </td>
-                        <td className="px-2 py-3">
-                          <div className="text-xs text-muted-foreground">{item.providerType || "--"}</div>
-                          <div className="mt-1 text-xs text-muted-foreground">{item.channelKey || "--"}</div>
-                        </td>
+                      <td className="px-2 py-3">
+                        <div className="text-xs text-muted-foreground">{item.requestedModel || "--"}</div>
+                        <div className="mt-1 text-xs text-muted-foreground">{item.tokenName || "未命名令牌"}</div>
+                      </td>
+                      <td className="px-2 py-3">
+                        <div className="text-xs text-muted-foreground">{item.providerType || "--"}</div>
+                        <div className="mt-1 text-xs text-muted-foreground">{item.channelKey || "--"}</div>
+                      </td>
 
-                        <td className="px-2 py-3">
-                          <div className="text-xs text-muted-foreground">
-                            <span
-                              className={cn(
-                                item.result === "success"
-                                  ? "text-emerald-600 dark:text-emerald-400"
-                                  : "text-rose-600 dark:text-rose-400",
-                              )}
-                            >
-                              {item.result === "success" ? "成功" : "失败"}
-                            </span>
-                          </div>
-                          <div className="mt-1 text-xs text-muted-foreground">
-                            {item.upstreamStatus || "--"} · 重试 {item.retryCount}
-                          </div>
-                        </td>
-
-                        <td className="px-2 py-3">
-                          <div className="text-xs text-muted-foreground">
-                            {item.streamMode === "stream" ? "流式" : "非流式"}
-                          </div>
-                          <div className="mt-1 text-xs text-muted-foreground">{formatDuration(item.latencyMs)}</div>
-                        </td>
-
-                        <td className="px-2 py-3">
-                          {/* <div className="font-medium">{formatCompactNumber(item.totalTokens)} tokens</div> */}
-                          <div className="text-xs text-muted-foreground">
-                            输入 {formatCompactNumber(item.promptTokens)} / 输出{" "}
-                            {formatCompactNumber(item.completionTokens)}
-                          </div>
-                          <div className="mt-1 text-xs text-muted-foreground">{formatCurrency(item.totalCost, displayDecimals)}</div>
-                        </td>
-
-                        <td className="px-2 py-3 text-right">
-                          <Button
-                            variant="outline"
-                            size="icon"
-                            className="h-8 w-8 text-gray-600 border-0 rounded-0 shadow-none"
-                            onClick={() => setSelectedItem(item)}
-                            aria-label="查看详情"
+                      <td className="px-2 py-3">
+                        <div className="text-xs text-muted-foreground">
+                          <span
+                            className={cn(
+                              item.result === "success"
+                                ? "text-emerald-600 dark:text-emerald-400"
+                                : "text-rose-600 dark:text-rose-400",
+                            )}
                           >
-                            <Eye className="h-4 w-4" />
-                          </Button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                <div className="flex flex-col gap-3 border-t pt-4 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="text-xs text-muted-foreground">
-                    {totalItems > 0 ? `显示第 ${currentStart}-${currentEnd} 条，共 ${totalItems} 条` : "暂无记录"}
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2">
+                            {item.result === "success" ? "成功" : "失败"}
+                          </span>
+                        </div>
+                        <div className="mt-1 text-xs text-muted-foreground">
+                          {item.upstreamStatus || "--"} · 重试 {item.retryCount}
+                        </div>
+                      </td>
+
+                      <td className="px-2 py-3">
+                        <div className="text-xs text-muted-foreground">
+                          {item.streamMode === "stream" ? "流式" : "非流式"}
+                        </div>
+                        <div className="mt-1 text-xs text-muted-foreground">{formatDuration(item.latencyMs)}</div>
+                      </td>
+
+                      <td className="px-2 py-3">
+                        {/* <div className="font-medium">{formatCompactNumber(item.totalTokens)} tokens</div> */}
+                        <div className="text-xs text-muted-foreground">
+                          输入 {formatCompactNumber(item.promptTokens)} / 输出{" "}
+                          {formatCompactNumber(item.completionTokens)}
+                        </div>
+                        <div className="mt-1 text-xs text-muted-foreground">
+                          {formatCurrency(item.totalCost, displayDecimals)}
+                        </div>
+                      </td>
+
+                      <td className="px-2 py-3 text-right">
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          className="h-8 w-8 text-gray-600 border-0 rounded-0 shadow-none"
+                          onClick={() => setSelectedItem(item)}
+                          aria-label="查看详情"
+                        >
+                          <Eye className="h-4 w-4" />
+                        </Button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <div className="flex flex-col gap-3 border-t pt-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="text-xs text-muted-foreground">
+                  {totalItems > 0 ? `显示第 ${currentStart}-${currentEnd} 条，共 ${totalItems} 条` : "暂无记录"}
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handlePageChange(activePage - 1)}
+                    disabled={!logsQuery.data?.hasPrevPage || logsQuery.isFetching}
+                  >
+                    上一页
+                  </Button>
+                  {visiblePages.map((page) => (
                     <Button
-                      variant="outline"
+                      key={page}
+                      variant={page === activePage ? "default" : "outline"}
                       size="sm"
-                      onClick={() => handlePageChange(activePage - 1)}
-                      disabled={!logsQuery.data?.hasPrevPage || logsQuery.isFetching}
+                      onClick={() => handlePageChange(page)}
+                      disabled={logsQuery.isFetching}
                     >
-                      上一页
+                      {page}
                     </Button>
-                    {visiblePages.map((page) => (
-                      <Button
-                        key={page}
-                        variant={page === activePage ? "default" : "outline"}
-                        size="sm"
-                        onClick={() => handlePageChange(page)}
-                        disabled={logsQuery.isFetching}
-                      >
-                        {page}
-                      </Button>
-                    ))}
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handlePageChange(activePage + 1)}
-                      disabled={!logsQuery.data?.hasNextPage || logsQuery.isFetching}
-                    >
-                      下一页
-                    </Button>
-                  </div>
+                  ))}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handlePageChange(activePage + 1)}
+                    disabled={!logsQuery.data?.hasNextPage || logsQuery.isFetching}
+                  >
+                    下一页
+                  </Button>
                 </div>
               </div>
-            ) : (
-              <div className="rounded-xl border border-dashed bg-muted/20 px-4 py-14 text-center">
-                <p className="text-sm font-medium">没有匹配的日志记录</p>
-                <p className="mt-1 text-sm text-muted-foreground">调整时间范围、维度或关键字后重试。</p>
-              </div>
-            )}
-          </CardContent>
+            </div>
+          ) : (
+            <div className="rounded-xl border border-dashed bg-muted/20 px-4 py-14 text-center">
+              <p className="text-sm font-medium">没有匹配的日志记录</p>
+              <p className="mt-1 text-sm text-muted-foreground">调整时间范围、维度或关键字后重试。</p>
+            </div>
+          )}
         </Card>
       </div>
 
       <Dialog open={Boolean(selectedItem)} onOpenChange={(open) => !open && setSelectedItem(null)}>
-        <DialogContent className="max-w-4xl">
+        <DialogContent className="max-w-5xl">
           <DialogHeader>
-            <DialogTitle>使用日志详情</DialogTitle>
-            <DialogDescription>查看本次请求的完整上下文、客户端信息、错误摘要与资源消耗。</DialogDescription>
+            <DialogTitle>日志详情</DialogTitle>
           </DialogHeader>
 
           {selectedItem && (
-            <div className="max-h-[70vh] space-y-6 overflow-y-auto pr-1">
-              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                <DetailField label="时间" value={formatDateTime(selectedItem.timestamp)} />
-                <DetailField label="结果" value={selectedItem.result === "success" ? "成功" : "失败"} />
-                <DetailField label="HTTP 状态" value={selectedItem.upstreamStatus || "--"} />
-                <DetailField label="状态族" value={selectedItem.statusFamily || "--"} />
-              </div>
+            <div className="max-h-[70vh] space-y-4 overflow-y-auto pr-1">
+              <section className="overflow-hidden rounded-xl bg-gradient-to-tr from-slate-950 via-slate-500 to-slate-800 p-5 text-slate-50">
+                <div className="flex flex-col gap-4 xl:flex-row xl:justify-between">
+                  <div className="min-w-0 flex-1 flex flex-col">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge
+                        variant={selectedItem.result === "success" ? "success" : "destructive"}
+                        className="rounded-full px-3 py-1 text-xs uppercase tracking-[0.18em]"
+                      >
+                        {selectedItem.result === "success" ? "成功" : "失败"}
+                      </Badge>
+                      <Badge
+                        variant="outline"
+                        className="rounded-full border-white/10 backdrop-blur-xl bg-white/10 px-3 py-1 text-xs text-slate-100"
+                      >
+                        {selectedItem.streamMode === "stream" ? "流式" : "非流式"}
+                      </Badge>
+                      <Badge
+                        variant="outline"
+                        className="rounded-full border-white/10 backdrop-blur-xl bg-white/10 px-3 py-1 font-mono text-xs text-slate-100 uppercase"
+                      >
+                        {formatDetailValue(selectedItem.routeId)}
+                      </Badge>
+                    </div>
 
-              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                <DetailField label="令牌名称" value={selectedItem.tokenName || "--"} />
-                <DetailField label="渠道标识" value={selectedItem.channelKey || "--"} />
-                <DetailField label="服务商" value={selectedItem.providerType || "--"} />
-                <DetailField label="接口路由" value={selectedItem.routeId || "--"} />
-              </div>
+                    <div className="mt-3 flex flex-col h-full">
+                      <div className="flex-1"></div>
+                      <div className="break-all text-3xl font-mono font-bold tracking-tight">
+                        {formatDetailValue(selectedItem.requestedModel || selectedItem.upstreamModel)}
+                      </div>
+                      <div className="flex-1"></div>
+                      <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs/5 text-slate-300/80 uppercase">
+                        <div className="border-r border-slate-50/10 pr-4">
+                          令牌
+                          <br />
+                          <span className="text-slate-100">{formatDetailValue(selectedItem.tokenName)}</span>
+                        </div>
+                        <div className="border-r border-slate-50/10 pr-4">
+                          端点
+                          <br />
+                          <span className="text-slate-100">{formatDetailValue(selectedItem.providerType)}</span>
+                        </div>
+                        <div>
+                          渠道
+                          <br />
+                          <span className="text-slate-100">{formatDetailValue(selectedItem.channelKey)}</span>
+                        </div>
+                      </div>
+                      <div className="flex-1"></div>
+                    </div>
+                  </div>
 
-              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                <DetailField label="请求模型" value={selectedItem.requestedModel || "--"} />
-                <DetailField label="上游模型" value={selectedItem.upstreamModel || "--"} />
-                <DetailField label="流式模式" value={selectedItem.streamMode === "stream" ? "流式" : "非流式"} />
-                <DetailField label="重试次数" value={selectedItem.retryCount} />
-              </div>
+                  <div className="min-w-0 rounded-lg bg-white/[0.04] px-4 py-2 xl:w-[340px] backdrop-blur-xl">
+                    <DetailMetric label="总成本" value={formatCurrency(selectedItem.totalCost, displayDecimals)} />
+                    <DetailMetric label="延迟" value={formatDuration(selectedItem.latencyMs)} />
+                    <DetailMetric label="总 Tokens" value={formatCompactNumber(selectedItem.totalTokens)} />
+                    <DetailMetric label="发生时间" value={formatDateTime(selectedItem.timestamp)} />
+                  </div>
+                </div>
+              </section>
 
-              <div className="grid gap-3 md:grid-cols-2">
-                <DetailField label="Request ID" value={selectedItem.requestId || "--"} mono />
-                <DetailField label="Trace ID" value={selectedItem.traceId || "--"} mono />
-              </div>
+              <DetailSection title="请求概览">
+                <div className="grid gap-x-8 border-t border-border/60 pt-2 md:grid-cols-2">
+                  <div className="divide-y divide-border/60">
+                    <DetailRow label="请求模型" value={selectedItem.requestedModel} />
+                    <DetailRow label="上游模型" value={selectedItem.upstreamModel} />
+                    <DetailRow label="令牌名称" value={selectedItem.tokenName} />
+                    <DetailRow label="渠道标识" value={selectedItem.channelKey} />
+                    <DetailRow label="服务商" value={selectedItem.providerType} />
+                  </div>
+                  <div className="divide-y divide-border/60">
+                    <DetailRow label="接口路由" value={selectedItem.routeId} />
+                    <DetailRow
+                      label="HTTP 状态"
+                      value={selectedItem.upstreamStatus}
+                      tone={selectedItem.result === "success" ? "success" : "danger"}
+                    />
+                    <DetailRow label="流式模式" value={selectedItem.streamMode === "stream" ? "流式" : "非流式"} />
+                    <DetailRow label="重试次数" value={selectedItem.retryCount} />
+                    <DetailRow label="状态族" value={selectedItem.statusFamily} tone="subtle" />
+                  </div>
+                </div>
+              </DetailSection>
 
-              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                <DetailField label="客户端 IP" value={selectedItem.clientIp || "--"} mono />
-                <DetailField
-                  label="地理位置"
-                  value={
-                    [selectedItem.country, selectedItem.region, selectedItem.city].filter(Boolean).join(" / ") || "--"
-                  }
-                />
-                <DetailField
-                  label="边缘节点 / 时区"
-                  value={[selectedItem.colo, selectedItem.timezone].filter(Boolean).join(" · ") || "--"}
-                />
-              </div>
+              <DetailSection title="计费与性能">
+                <div className="grid gap-x-8 border-t border-border/60 pt-2 md:grid-cols-2">
+                  <div className="divide-y divide-border/60">
+                    <DetailRow label="总成本" value={formatCurrency(selectedItem.totalCost, displayDecimals)} />
+                    <DetailRow label="延迟" value={formatDuration(selectedItem.latencyMs)} />
+                    <DetailRow label="总 Tokens" value={formatCompactNumber(selectedItem.totalTokens)} />
+                  </div>
+                  <div className="divide-y divide-border/60">
+                    <DetailRow label="输入 Tokens" value={formatCompactNumber(selectedItem.promptTokens)} />
+                    <DetailRow label="输出 Tokens" value={formatCompactNumber(selectedItem.completionTokens)} />
+                    <DetailRow label="缓存 Tokens" value={formatCompactNumber(selectedItem.cachedTokens)} />
+                  </div>
+                </div>
+              </DetailSection>
 
-              <div className="grid gap-3">
-                <DetailField label="User-Agent" value={selectedItem.userAgent || "--"} />
-              </div>
+              <DetailSection title="诊断标识">
+                <div className="grid gap-x-8 border-t border-border/60 pt-2 md:grid-cols-2">
+                  <div className="divide-y divide-border/60">
+                    <DetailRow label="Request ID" value={selectedItem.requestId} />
+                    <DetailRow label="Trace ID" value={selectedItem.traceId} />
+                  </div>
+                  <div className="divide-y divide-border/60">
+                    <DetailRow label="时间" value={formatDateTime(selectedItem.timestamp)} />
+                    <DetailRow
+                      label="错误码"
+                      value={selectedItem.errorCode}
+                      tone={selectedItem.result === "success" ? "subtle" : "danger"}
+                    />
+                  </div>
+                </div>
 
-              <div className="grid gap-3 md:grid-cols-2">
-                <DetailField label="错误码" value={selectedItem.errorCode || "--"} />
-                <DetailField label="错误摘要" value={selectedItem.errorSummary || "--"} />
-              </div>
+                {selectedItem.result !== "success" && selectedItem.errorSummary && (
+                  <div className="break-all p-3 text-xs leading-5 text-red-500 bg-red-50/50 border border-red-200 rounded-sm">
+                    {formatDetailValue(selectedItem.errorSummary)}
+                  </div>
+                )}
+              </DetailSection>
 
-              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                <DetailField label="总 Tokens" value={formatCompactNumber(selectedItem.totalTokens)} />
-                <DetailField
-                  label="输入 / 输出 Tokens"
-                  value={`${formatCompactNumber(selectedItem.promptTokens)} / ${formatCompactNumber(selectedItem.completionTokens)}`}
-                />
-                <DetailField label="总成本" value={formatCurrency(selectedItem.totalCost, displayDecimals)} />
-                <DetailField label="延迟" value={formatDuration(selectedItem.latencyMs)} />
-              </div>
+              <DetailSection title="客户端环境">
+                <div className="grid gap-x-8 border-t border-border/60 pt-2 md:grid-cols-2">
+                  <div className="divide-y divide-border/60">
+                    <DetailRow label="客户端 IP" value={selectedItem.clientIp} />
+                    <DetailRow
+                      label="地理位置"
+                      value={[selectedItem.country, selectedItem.region, selectedItem.city].filter(Boolean).join(" / ")}
+                    />
+                  </div>
+                  <div className="divide-y divide-border/60">
+                    <DetailRow
+                      label="边缘节点 / 时区"
+                      value={[selectedItem.colo, selectedItem.timezone].filter(Boolean).join(" · ")}
+                    />
+                    <DetailRow label="User-Agent" value={selectedItem.userAgent} />
+                  </div>
+                </div>
+              </DetailSection>
             </div>
           )}
         </DialogContent>
