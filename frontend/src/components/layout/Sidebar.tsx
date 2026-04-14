@@ -20,20 +20,23 @@ import {
 import { useAuthStore } from "@/store/auth";
 import { useState } from "react";
 
+type NavGroup = "总览" | "管理" | "工具" | "系统";
+
 interface NavItem {
   title: string;
   href: string;
   icon: React.ComponentType<{ className?: string }>;
+  group: NavGroup;
 }
 
 const navItems: NavItem[] = [
-  { title: "总览看板", href: "/dashboard", icon: BarChart3 },
-  { title: "使用日志", href: "/usage-logs", icon: FileText },
-  { title: "渠道管理", href: "/channels", icon: LinkIcon },
-  { title: "令牌管理", href: "/tokens", icon: Key },
-  { title: "定价管理", href: "/pricing", icon: DollarSign },
-  { title: "系统设置", href: "/settings", icon: SlidersHorizontal },
-  { title: "API 测试", href: "/api-test", icon: TestTube2 },
+  { title: "总览看板", href: "/dashboard", icon: BarChart3, group: "总览" },
+  { title: "渠道管理", href: "/channels", icon: LinkIcon, group: "管理" },
+  { title: "令牌管理", href: "/tokens", icon: Key, group: "管理" },
+  { title: "定价管理", href: "/pricing", icon: DollarSign, group: "管理" },
+  { title: "使用日志", href: "/usage-logs", icon: FileText, group: "工具" },
+  { title: "API 测试", href: "/api-test", icon: TestTube2, group: "工具" },
+  { title: "系统设置", href: "/settings", icon: SlidersHorizontal, group: "系统" },
 ];
 
 interface SidebarProps {
@@ -111,6 +114,21 @@ export function Sidebar({
     );
   };
 
+  const groupedNavItems = (() => {
+    const groups: Record<NavGroup, NavItem[]> = {
+      总览: [],
+      管理: [],
+      工具: [],
+      系统: [],
+    };
+    navItems.forEach((item) => {
+      groups[item.group].push(item);
+    });
+    return groups;
+  })();
+
+  const groupOrder: NavGroup[] = ["总览", "管理", "工具", "系统"];
+
   return (
     <aside
       className={cn(
@@ -147,11 +165,13 @@ export function Sidebar({
 
       {/* Navigation */}
       <nav className="flex-1 px-2.5 py-3 overflow-y-auto scrollbar-thin">
-        <div className="space-y-1">
-          {navItems.map((item) => (
-            <NavLink key={item.href} item={item} />
-          ))}
-        </div>
+        {groupOrder.map((group) => (
+          <div key={group} className={cn("space-y-1", group !== groupOrder[0] && "mt-3 pt-3 border-t border-border/30")}>
+            {groupedNavItems[group].map((item) => (
+              <NavLink key={item.href} item={item} />
+            ))}
+          </div>
+        ))}
       </nav>
 
       {/* Footer */}
