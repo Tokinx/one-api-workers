@@ -1,6 +1,10 @@
 import { Context } from "hono"
 import { normalizeUsage as normalizeResponsesUsage } from "./shared/usage-utils"
 import { buildPrefixedTargetUrl } from "./shared/prefixed-target-url"
+import {
+    buildUpstreamRequestHeaders,
+    OPENAI_COMPAT_UPSTREAM_HEADER_ALLOWLIST,
+} from "./shared/upstream-request-headers"
 
 type OpenAIStreamChoice = {
     index?: number;
@@ -80,12 +84,13 @@ const buildProxyRequest = (
     config: ChannelConfig
 ): Request => {
     const targetUrl = buildPrefixedTargetUrl(config.endpoint, "/v1/chat/completions");
-    const targetHeaders = new Headers(request.headers);
     const apiKey = config.api_key || "";
-
-    targetHeaders.delete("Authorization");
-    targetHeaders.delete("x-api-key");
-    targetHeaders.set("Authorization", `Bearer ${apiKey}`);
+    const targetHeaders = buildUpstreamRequestHeaders(request, {
+        allowHeaders: OPENAI_COMPAT_UPSTREAM_HEADER_ALLOWLIST,
+        overrideHeaders: {
+            Authorization: `Bearer ${apiKey}`,
+        },
+    });
 
     return new Request(targetUrl, {
         method: request.method,

@@ -5,6 +5,56 @@
  */
 
 const PORT = 9999
+const INSPECTABLE_REQUEST_KEYS = ["chat-completions", "messages", "models", "responses"] as const
+
+type InspectableRequestKey = typeof INSPECTABLE_REQUEST_KEYS[number]
+
+type CapturedRequest = {
+  body: unknown
+  headers: Record<string, string>
+  method: string
+  path: string
+}
+
+const capturedRequests = new Map<InspectableRequestKey, CapturedRequest>()
+
+const toHeaderRecord = (headers: Headers): Record<string, string> => {
+  return Object.fromEntries(Array.from(headers.entries()).map(([key, value]) => [key.toLowerCase(), value]))
+}
+
+const getCaptureKey = (path: string): InspectableRequestKey | null => {
+  if (path.endsWith("/chat/completions")) {
+    return "chat-completions"
+  }
+
+  if (path.endsWith("/messages")) {
+    return "messages"
+  }
+
+  if (path.endsWith("/responses")) {
+    return "responses"
+  }
+
+  if (path.endsWith("/models")) {
+    return "models"
+  }
+
+  return null
+}
+
+const rememberRequest = (req: Request, path: string, body: unknown) => {
+  const captureKey = getCaptureKey(path)
+  if (!captureKey) {
+    return
+  }
+
+  capturedRequests.set(captureKey, {
+    body,
+    headers: toHeaderRecord(req.headers),
+    method: req.method,
+    path,
+  })
+}
 
 // --- OpenAI Chat Completions (non-stream) ---
 const openaiChatResponse = (model: string) => ({
@@ -87,11 +137,29 @@ const server = Bun.serve({
   async fetch(req) {
     const url = new URL(req.url)
     const path = url.pathname
+    const inspectKey = url.searchParams.get("key")
+
+    if (path === "/__reset" && req.method === "POST") {
+      capturedRequests.clear()
+      return Response.json({ ok: true })
+    }
+
+    if (path === "/__inspect" && req.method === "GET") {
+      if (!inspectKey || !INSPECTABLE_REQUEST_KEYS.includes(inspectKey as InspectableRequestKey)) {
+        return Response.json({
+          keys: INSPECTABLE_REQUEST_KEYS,
+        }, { status: 400 })
+      }
+
+      return Response.json(capturedRequests.get(inspectKey as InspectableRequestKey) || null)
+    }
+
     const body = req.method === "POST" ? await req.json().catch(() => ({})) : {}
     const model = (body as any).model || "mock-model"
     const isStream = (body as any).stream === true
 
     console.log(`[MOCK] ${req.method} ${path} model=${model} stream=${isStream}`)
+    rememberRequest(req, path, body)
 
     // OpenAI Chat Completions
     if (path.endsWith("/chat/completions")) {

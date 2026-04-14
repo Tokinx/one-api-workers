@@ -32,7 +32,11 @@ import {
     UsageLogSearchEndpoint,
 } from "./analytics_api"
 import { getSystemConfig, isTelegramSecurityEnabled } from "../system-config"
-import { getAdminSessionHeaderName, validateAdminSession } from "./auth_shared"
+import {
+    clearAdminSessionCookie,
+    getAdminSessionTokenFromRequest,
+    validateAdminSession,
+} from "./auth_shared"
 
 const app = new Hono<HonoCustomType>()
 export const api = fromHono(app)
@@ -54,11 +58,15 @@ app.use('/api/admin/*', async (c, next) => {
         return;
     }
 
-    const sessionToken = c.req.header(getAdminSessionHeaderName());
+    const sessionToken = getAdminSessionTokenFromRequest(c);
 
-    if (await validateAdminSession(c, sessionToken)) {
-        await next();
-        return;
+    if (sessionToken) {
+        if (await validateAdminSession(c, sessionToken)) {
+            await next();
+            return;
+        }
+
+        clearAdminSessionCookie(c);
     }
 
     const systemConfig = await getSystemConfig(c);

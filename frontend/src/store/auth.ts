@@ -2,11 +2,7 @@ import { create } from 'zustand'
 import { apiClient } from '@/api/client'
 import { clearScopedCacheByPrefix } from '@/lib/local-cache'
 import { type AdminLoginResponse } from '@/types'
-import {
-  clearAdminCredentials,
-  getStoredAdminCredential,
-  storeAdminSessionToken,
-} from '@/lib/admin-auth'
+import { clearAdminCredentials } from '@/lib/admin-auth'
 
 interface AuthState {
   isAuthenticated: boolean
@@ -38,13 +34,14 @@ export const useAuthStore = create<AuthState>((set) => ({
         throw new Error('登录响应无效')
       }
 
-      if (loginResult.sessionToken) {
-        storeAdminSessionToken(loginResult.sessionToken)
+      clearAdminCredentials()
+
+      if (!loginResult.requiresVerification) {
         set({ isAuthenticated: true, isLoading: false, showAuthModal: false })
         return loginResult
       }
 
-      if (!loginResult.requiresVerification || !loginResult.challengeId) {
+      if (!loginResult.challengeId) {
         throw new Error('登录响应缺少验证码挑战信息')
       }
 
@@ -68,11 +65,11 @@ export const useAuthStore = create<AuthState>((set) => ({
       const response = await apiClient.verifyAdminLogin(challengeId, code)
       const loginResult = response.data as AdminLoginResponse
 
-      if (!loginResult.sessionToken) {
-        throw new Error('登录响应缺少会话令牌')
+      if (!loginResult || loginResult.requiresVerification) {
+        throw new Error('验证码验证后未建立会话')
       }
 
-      storeAdminSessionToken(loginResult.sessionToken)
+      clearAdminCredentials()
       set({ isAuthenticated: true, isLoading: false, showAuthModal: false })
     } catch (error) {
       clearAdminCredentials()
@@ -99,13 +96,9 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   checkAuth: async () => {
-    if (!getStoredAdminCredential()) {
-      set({ isAuthenticated: false, isLoading: false })
-      return
-    }
-
     set({ isLoading: true })
     try {
+      clearAdminCredentials()
       await apiClient.checkAuth()
       set({ isAuthenticated: true, isLoading: false })
     } catch (error) {

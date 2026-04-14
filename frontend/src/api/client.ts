@@ -14,7 +14,7 @@ import {
   UsageLogFilters,
   UsageLogSearchData,
 } from '@/types'
-import { clearAdminCredentials, getStoredAdminCredential } from '@/lib/admin-auth'
+import { clearAdminCredentials } from '@/lib/admin-auth'
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || ''
 
@@ -37,6 +37,8 @@ type RequestBehavior = {
   skipUnauthorizedHandler?: boolean
 }
 
+const isAdminEndpoint = (endpoint: string): boolean => endpoint.startsWith('/api/admin/')
+
 export function setErrorHandlers(handlers: {
   onUnauthorized?: () => void
   onError?: (error: ApiError) => void
@@ -52,12 +54,6 @@ async function requestInterceptor(config: RequestInit): Promise<RequestInit> {
   // 设置默认 Content-Type
   if (!headers.has('Content-Type')) {
     headers.set('Content-Type', 'application/json')
-  }
-
-  // 添加 admin token
-  const credential = getStoredAdminCredential()
-  if (credential) {
-    headers.set(credential.headerName, credential.token)
   }
 
   return { ...config, headers }
@@ -165,7 +161,10 @@ async function request<T>(
 
   try {
     const config = await requestInterceptor(options)
-    const response = await fetch(url, config)
+    const requestConfig = isAdminEndpoint(endpoint)
+      ? { ...config, credentials: 'include' as const }
+      : config
+    const response = await fetch(url, requestConfig)
     return responseInterceptor(response, behavior)
   } catch (error) {
     // 处理网络错误
@@ -291,6 +290,7 @@ export const apiClient = {
     const url = `${BASE_URL}${endpoint}`
     const response = await fetch(url, {
       method: 'POST',
+      credentials: 'omit',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${token}`,

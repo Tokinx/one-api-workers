@@ -1,6 +1,10 @@
 import { Context } from "hono"
 import { checkoutUsageData, handleStreamResponse } from "./shared/openai-stream-utils"
 import { buildAzureTargetUrl } from "./shared/azure-target-url"
+import {
+    buildUpstreamRequestHeaders,
+    OPENAI_COMPAT_UPSTREAM_HEADER_ALLOWLIST,
+} from "./shared/upstream-request-headers"
 
 const buildProxyRequest = (
     request: Request,
@@ -10,11 +14,12 @@ const buildProxyRequest = (
     const targetUrl = buildAzureTargetUrl(request, config.endpoint)
     const apiKey = config.api_key || ""
 
-    const targetHeaders = new Headers(request.headers)
-    targetHeaders.delete("Authorization")
-    targetHeaders.delete("Host")
-    targetHeaders.delete("Cookie")
-    targetHeaders.set("api-key", apiKey)
+    const targetHeaders = buildUpstreamRequestHeaders(request, {
+        allowHeaders: OPENAI_COMPAT_UPSTREAM_HEADER_ALLOWLIST,
+        overrideHeaders: {
+            "api-key": apiKey,
+        },
+    })
 
     return new Request(targetUrl, {
         method: request.method,

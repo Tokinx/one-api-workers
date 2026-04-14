@@ -1,6 +1,10 @@
 import { Context } from "hono"
 import { DEFAULT_CLAUDE_API_VERSION } from "../channel-config"
 import { buildPrefixedTargetUrl } from "./shared/prefixed-target-url"
+import {
+    buildUpstreamRequestHeaders,
+    CLAUDE_UPSTREAM_HEADER_ALLOWLIST,
+} from "./shared/upstream-request-headers"
 
 /**
  * Claude API Proxy Provider
@@ -44,11 +48,7 @@ type ClaudeStreamEvent = {
 }
 
 /**
- * Builds the proxy request for Claude API
- * - Removes Authorization header (client may send OpenAI format)
- * - Sets x-api-key header (Claude uses this instead of Authorization)
- * - Sets anthropic-version header (required by Claude API)
- * - Preserves all other headers from original request
+ * Builds the proxy request for Claude API with an allowlisted header set.
  */
 const buildProxyRequest = (
     request: Request,
@@ -59,16 +59,13 @@ const buildProxyRequest = (
     const targetUrl = buildPrefixedTargetUrl(config.endpoint, url.pathname)
     const apiKey = config.api_key || ""
 
-    const targetHeaders = new Headers(request.headers)
-
-    // Remove Authorization header (client may send OpenAI format: "Authorization: Bearer sk-xxx")
-    targetHeaders.delete("Authorization")
-    targetHeaders.delete("x-api-key")
-
-    // Claude uses x-api-key header instead of Authorization
-    targetHeaders.set("x-api-key", apiKey)
-    // Claude requires anthropic-version header
-    targetHeaders.set("anthropic-version", DEFAULT_CLAUDE_API_VERSION)
+    const targetHeaders = buildUpstreamRequestHeaders(request, {
+        allowHeaders: CLAUDE_UPSTREAM_HEADER_ALLOWLIST,
+        overrideHeaders: {
+            "anthropic-version": DEFAULT_CLAUDE_API_VERSION,
+            "x-api-key": apiKey,
+        },
+    })
 
     return new Request(targetUrl, {
         method: request.method,

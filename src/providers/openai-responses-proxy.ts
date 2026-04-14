@@ -4,6 +4,10 @@ import {
     checkoutResponsesUsageData,
 } from "./shared/responses-stream-utils"
 import { buildPrefixedTargetUrl } from "./shared/prefixed-target-url"
+import {
+    buildUpstreamRequestHeaders,
+    OPENAI_COMPAT_UPSTREAM_HEADER_ALLOWLIST,
+} from "./shared/upstream-request-headers"
 
 const buildProxyRequest = (
     request: Request,
@@ -14,10 +18,12 @@ const buildProxyRequest = (
     const targetUrl = buildPrefixedTargetUrl(config.endpoint, url.pathname)
     const apiKey = config.api_key || ""
 
-    const targetHeaders = new Headers(request.headers)
-    targetHeaders.delete("Host")
-    targetHeaders.delete("Cookie")
-    targetHeaders.set("Authorization", `Bearer ${apiKey}`)
+    const targetHeaders = buildUpstreamRequestHeaders(request, {
+        allowHeaders: OPENAI_COMPAT_UPSTREAM_HEADER_ALLOWLIST,
+        overrideHeaders: {
+            Authorization: `Bearer ${apiKey}`,
+        },
+    })
 
     return new Request(targetUrl, {
         method: request.method,

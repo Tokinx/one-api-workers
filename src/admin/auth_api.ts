@@ -5,11 +5,13 @@ import { z } from "zod";
 import { CommonErrorResponse, CommonSuccessfulResponse } from "../model";
 import { getSystemConfig, isTelegramSecurityEnabled } from "../system-config";
 import {
+    clearAdminSessionCookie,
     createAdminLoginChallenge,
     createAdminSession,
     deleteAdminLoginChallenge,
-    getAdminSessionHeaderName,
+    getAdminSessionTokenFromRequest,
     invalidateAdminSession,
+    setAdminSessionCookie,
     sendAdminLoginCodeNotification,
     sendAdminLoginResultNotification,
     verifyAdminLoginChallenge,
@@ -36,6 +38,7 @@ const buildDirectLoginResponse = async (
     c: Context<HonoCustomType>
 ) => {
     const session = await createAdminSession(c);
+    setAdminSessionCookie(c, session.sessionToken, session.expiresAt);
 
     return {
         success: true,
@@ -43,7 +46,7 @@ const buildDirectLoginResponse = async (
             requiresVerification: false,
             challengeId: null,
             challengeExpiresAt: null,
-            sessionToken: session.sessionToken,
+            sessionToken: null,
             sessionExpiresAt: session.expiresAt,
         },
         message: "Login successful",
@@ -188,6 +191,7 @@ export class AdminLoginVerifyEndpoint extends OpenAPIRoute {
         }
 
         const session = await createAdminSession(c);
+        setAdminSessionCookie(c, session.sessionToken, session.expiresAt);
 
         await sendAdminLoginResultNotification(
             securityConfig,
@@ -203,7 +207,7 @@ export class AdminLoginVerifyEndpoint extends OpenAPIRoute {
                 requiresVerification: false,
                 challengeId: null,
                 challengeExpiresAt: null,
-                sessionToken: session.sessionToken,
+                sessionToken: null,
                 sessionExpiresAt: session.expiresAt,
             },
             message: "Login verified successfully",
@@ -222,9 +226,10 @@ export class AdminLogoutEndpoint extends OpenAPIRoute {
     };
 
     async handle(c: Context<HonoCustomType>) {
-        const sessionToken = c.req.header(getAdminSessionHeaderName());
+        const sessionToken = getAdminSessionTokenFromRequest(c);
 
         await invalidateAdminSession(c, sessionToken);
+        clearAdminSessionCookie(c);
 
         return {
             success: true,

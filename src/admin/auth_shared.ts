@@ -1,10 +1,12 @@
 import { Context } from "hono";
+import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 
-const ADMIN_SESSION_HEADER = "x-admin-session";
+const ADMIN_SESSION_COOKIE_NAME = "oaw_admin_session";
 const ADMIN_SESSION_TTL_MS = 12 * 60 * 60 * 1000;
 const ADMIN_LOGIN_CHALLENGE_TTL_MS = 5 * 60 * 1000;
 const ADMIN_LOGIN_CHALLENGE_MAX_ATTEMPTS = 5;
 const DEFAULT_SYSTEM_TIMEZONE = "Asia/Shanghai";
+const LOCAL_DEV_HOSTNAMES = new Set(["0.0.0.0", "127.0.0.1", "::1", "localhost"]);
 
 type LoginRequestMetadata = {
     clientIp: string;
@@ -144,8 +146,52 @@ const buildBaseMessageLines = (
     ];
 };
 
-export const getAdminSessionHeaderName = (): string => {
-    return ADMIN_SESSION_HEADER;
+const isSecureCookieRequest = (c: Context<HonoCustomType>): boolean => {
+    const requestUrl = new URL(c.req.url);
+    return requestUrl.protocol === "https:" && !LOCAL_DEV_HOSTNAMES.has(requestUrl.hostname);
+};
+
+const buildAdminSessionCookieOptions = (
+    c: Context<HonoCustomType>,
+    expiresAt?: string
+) => {
+    return {
+        httpOnly: true,
+        maxAge: Math.floor(ADMIN_SESSION_TTL_MS / 1000),
+        path: "/api/admin",
+        sameSite: "Lax" as const,
+        secure: isSecureCookieRequest(c),
+        ...(expiresAt ? { expires: new Date(expiresAt) } : {}),
+    };
+};
+
+export const getAdminSessionTokenFromRequest = (
+    c: Context<HonoCustomType>
+): string | null => {
+    return getCookie(c, ADMIN_SESSION_COOKIE_NAME) || null;
+};
+
+export const setAdminSessionCookie = (
+    c: Context<HonoCustomType>,
+    sessionToken: string,
+    expiresAt: string
+): void => {
+    setCookie(
+        c,
+        ADMIN_SESSION_COOKIE_NAME,
+        sessionToken,
+        buildAdminSessionCookieOptions(c, expiresAt)
+    );
+};
+
+export const clearAdminSessionCookie = (
+    c: Context<HonoCustomType>
+): void => {
+    deleteCookie(
+        c,
+        ADMIN_SESSION_COOKIE_NAME,
+        buildAdminSessionCookieOptions(c)
+    );
 };
 
 export const createAdminSession = async (
