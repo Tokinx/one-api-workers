@@ -12,6 +12,7 @@ echo "Setting up test channels and tokens..."
 
 # Warm up the worker so schema migrations run against the same local D1 database.
 curl -s "$API_URL/api/admin/channel" > /dev/null 2>&1 || true
+"${DB_EXEC[@]}" "DELETE FROM admin_rate_limit; DELETE FROM admin_login_challenge; DELETE FROM admin_session; DELETE FROM settings WHERE key = 'SYSTEM_CONFIG'" > /dev/null 2>&1 || true
 
 # Channel: openai type
 "${DB_EXEC[@]}" "INSERT OR REPLACE INTO channel_config (key, value) VALUES ('test-openai', '{\"name\":\"test-openai\",\"type\":\"openai\",\"endpoint\":\"$MOCK\",\"api_key\":\"mock-key\",\"deployment_mapper\":{\"gpt-4o\":\"gpt-4o\",\"gpt-4\":\"gpt-4\"}}')"

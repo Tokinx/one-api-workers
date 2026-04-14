@@ -5,10 +5,14 @@ import { z } from "zod";
 import { CommonErrorResponse, CommonSuccessfulResponse } from "../model";
 import { getSystemConfig, isTelegramSecurityEnabled } from "../system-config";
 import {
+    AdminRateLimitError,
+    clearAdminRateLimitBucket,
     clearAdminSessionCookie,
+    consumeAdminRateLimit,
     createAdminLoginChallenge,
     createAdminSession,
     deleteAdminLoginChallenge,
+    getRequestMetadata,
     getAdminSessionTokenFromRequest,
     invalidateAdminSession,
     setAdminSessionCookie,
@@ -16,6 +20,44 @@ import {
     sendAdminLoginResultNotification,
     verifyAdminLoginChallenge,
 } from "./auth_shared";
+
+const ADMIN_LOGIN_START_ATTEMPT_POLICY = {
+    category: "admin-login-start:attempt",
+    maxAttempts: 6,
+    windowMs: 10 * 60 * 1000,
+    blockDurationMs: 15 * 60 * 1000,
+    message: "管理员登录请求过于频繁，请稍后再试",
+} as const;
+const ADMIN_LOGIN_START_FAILURE_POLICY = {
+    category: "admin-login-start:failure",
+    maxAttempts: 5,
+    windowMs: 30 * 60 * 1000,
+    blockDurationMs: 30 * 60 * 1000,
+    message: "管理员登录失败次数过多，请稍后再试",
+} as const;
+const ADMIN_LOGIN_VERIFY_ATTEMPT_POLICY = {
+    category: "admin-login-verify:attempt",
+    maxAttempts: 8,
+    windowMs: 10 * 60 * 1000,
+    blockDurationMs: 15 * 60 * 1000,
+    message: "验证码验证请求过于频繁，请稍后再试",
+} as const;
+const ADMIN_LOGIN_VERIFY_FAILURE_POLICY = {
+    category: "admin-login-verify:failure",
+    maxAttempts: 6,
+    windowMs: 30 * 60 * 1000,
+    blockDurationMs: 30 * 60 * 1000,
+    message: "验证码验证失败次数过多，请稍后再试",
+} as const;
+
+const buildRateLimitedResponse = (
+    c: Context<HonoCustomType>,
+    message: string,
+    retryAfterSeconds: number
+) => {
+    c.header("Retry-After", String(retryAfterSeconds));
+    return c.text(message, 429);
+};
 
 const loginStartRequestSchema = z.object({
     token: z.string().trim().min(1, "管理员令牌不能为空"),
@@ -81,11 +123,32 @@ export class AdminLoginStartEndpoint extends OpenAPIRoute {
         }
 
         const body = parsedBody.data;
+        const metadata = getRequestMetadata(c);
+        const rateLimitBucketId = metadata.clientIp || "unknown";
+        const startAttemptLimit = await consumeAdminRateLimit(
+            c,
+            ADMIN_LOGIN_START_ATTEMPT_POLICY,
+            rateLimitBucketId
+        );
+        if (!startAttemptLimit.ok) {
+            return buildRateLimitedResponse(
+                c,
+                startAttemptLimit.message,
+                startAttemptLimit.retryAfterSeconds
+            );
+        }
+
         const systemConfig = await getSystemConfig(c);
         const securityConfig = systemConfig.adminSecurity;
         const securityEnabled = isTelegramSecurityEnabled(securityConfig);
 
         if (!c.env.ADMIN_TOKEN || body.token !== c.env.ADMIN_TOKEN) {
+            const failureLimit = await consumeAdminRateLimit(
+                c,
+                ADMIN_LOGIN_START_FAILURE_POLICY,
+                rateLimitBucketId
+            );
+
             if (securityEnabled) {
                 await sendAdminLoginResultNotification(
                     securityConfig,
@@ -97,8 +160,22 @@ export class AdminLoginStartEndpoint extends OpenAPIRoute {
                 });
             }
 
+            if (!failureLimit.ok) {
+                return buildRateLimitedResponse(
+                    c,
+                    failureLimit.message,
+                    failureLimit.retryAfterSeconds
+                );
+            }
+
             return c.text("管理员令牌无效", 401);
         }
+
+        await clearAdminRateLimitBucket(
+            c,
+            ADMIN_LOGIN_START_FAILURE_POLICY.category,
+            rateLimitBucketId
+        );
 
         if (!securityEnabled) {
             return buildDirectLoginResponse(c);
@@ -115,6 +192,14 @@ export class AdminLoginStartEndpoint extends OpenAPIRoute {
             );
         } catch (error) {
             await deleteAdminLoginChallenge(c, challenge.challengeId);
+
+            if (error instanceof AdminRateLimitError) {
+                return buildRateLimitedResponse(
+                    c,
+                    error.message,
+                    error.retryAfterSeconds
+                );
+            }
 
             return c.text(
                 `Telegram 发送验证码失败：${error instanceof Error ? error.message : "unknown error"}`,
@@ -164,6 +249,21 @@ export class AdminLoginVerifyEndpoint extends OpenAPIRoute {
         }
 
         const body = parsedBody.data;
+        const metadata = getRequestMetadata(c);
+        const rateLimitBucketId = metadata.clientIp || "unknown";
+        const verifyAttemptLimit = await consumeAdminRateLimit(
+            c,
+            ADMIN_LOGIN_VERIFY_ATTEMPT_POLICY,
+            rateLimitBucketId
+        );
+        if (!verifyAttemptLimit.ok) {
+            return buildRateLimitedResponse(
+                c,
+                verifyAttemptLimit.message,
+                verifyAttemptLimit.retryAfterSeconds
+            );
+        }
+
         const systemConfig = await getSystemConfig(c);
         const securityConfig = systemConfig.adminSecurity;
 
@@ -178,6 +278,11 @@ export class AdminLoginVerifyEndpoint extends OpenAPIRoute {
         );
 
         if (!result.ok) {
+            const failureLimit = await consumeAdminRateLimit(
+                c,
+                ADMIN_LOGIN_VERIFY_FAILURE_POLICY,
+                rateLimitBucketId
+            );
             await sendAdminLoginResultNotification(
                 securityConfig,
                 c,
@@ -187,8 +292,29 @@ export class AdminLoginVerifyEndpoint extends OpenAPIRoute {
                 console.error("Failed to send Telegram login failure notification:", error);
             });
 
+            if (!failureLimit.ok) {
+                return buildRateLimitedResponse(
+                    c,
+                    failureLimit.message,
+                    failureLimit.retryAfterSeconds
+                );
+            }
+
             return c.text(result.reason || "验证码验证失败", 401);
         }
+
+        await Promise.all([
+            clearAdminRateLimitBucket(
+                c,
+                ADMIN_LOGIN_START_FAILURE_POLICY.category,
+                rateLimitBucketId
+            ),
+            clearAdminRateLimitBucket(
+                c,
+                ADMIN_LOGIN_VERIFY_FAILURE_POLICY.category,
+                rateLimitBucketId
+            ),
+        ]);
 
         const session = await createAdminSession(c);
         setAdminSessionCookie(c, session.sessionToken, session.expiresAt);

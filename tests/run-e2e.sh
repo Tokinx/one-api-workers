@@ -59,6 +59,19 @@ do_get() { curl -s -w "\n%{http_code}" "$@"; }
 do_post() { curl -s -w "\n%{http_code}" -X POST "$@"; }
 reset_mock_inspection() { curl -s -X POST "$MOCK_API/__reset" > /dev/null; }
 get_mock_inspection() { curl -sG "$MOCK_API/__inspect" --data-urlencode "key=$1"; }
+set_system_config_disabled() {
+  "${DB_EXEC[@]}" "INSERT OR REPLACE INTO settings (key, value) VALUES ('SYSTEM_CONFIG', '{\"displayDecimals\":6,\"adminSecurity\":{\"enabled\":false,\"telegramBotToken\":\"\",\"telegramChatId\":\"\",\"verifiedFingerprint\":\"\",\"verifiedAt\":null},\"apiDocs\":{\"enabled\":true}}')" > /dev/null 2>&1
+}
+set_system_config_with_telegram() {
+  local bot_token="$1" chat_id="$2" fingerprint
+  fingerprint=$(node -e "const source = process.argv[1] + '::' + process.argv[2]; let hash = 2166136261; for (let index = 0; index < source.length; index += 1) { hash ^= source.charCodeAt(index); hash = Math.imul(hash, 16777619); } process.stdout.write(source ? 'tgv1-' + ((hash >>> 0).toString(16)) : '');" "$bot_token" "$chat_id")
+  "${DB_EXEC[@]}" "INSERT OR REPLACE INTO settings (key, value) VALUES ('SYSTEM_CONFIG', '{\"displayDecimals\":6,\"adminSecurity\":{\"enabled\":true,\"telegramBotToken\":\"$bot_token\",\"telegramChatId\":\"$chat_id\",\"verifiedFingerprint\":\"$fingerprint\",\"verifiedAt\":\"2026-04-14T00:00:00.000Z\"},\"apiDocs\":{\"enabled\":true}}')" > /dev/null 2>&1
+}
+seed_blocked_rate_limit() {
+  local category="$1" bucket_id="$2" attempts="$3" blocked_until="$4" now_iso
+  now_iso=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+  "${DB_EXEC[@]}" "INSERT OR REPLACE INTO admin_rate_limit (bucket_key, category, bucket_id, window_started_at, attempts, blocked_until, last_event_at) VALUES ('$category:$bucket_id', '$category', '$bucket_id', '$now_iso', $attempts, '$blocked_until', '$now_iso')" > /dev/null 2>&1
+}
 
 if [[ -f ".dev.vars" ]]; then
   set -a
@@ -66,6 +79,8 @@ if [[ -f ".dev.vars" ]]; then
   source ".dev.vars"
   set +a
 fi
+
+LOGIN_PAYLOAD=$(printf '{"token":"%s"}' "$ADMIN_TOKEN")
 
 echo ""
 echo "========================================="
@@ -241,9 +256,8 @@ assert_http "quota exceeded → 402" "402" "Quota exceeded" "$R"
 echo ""
 echo "--- Admin session cookie ---"
 
-"${DB_EXEC[@]}" "INSERT OR REPLACE INTO settings (key, value) VALUES ('SYSTEM_CONFIG', '{\"displayDecimals\":6,\"adminSecurity\":{\"enabled\":false,\"telegramBotToken\":\"\",\"telegramChatId\":\"\",\"verifiedFingerprint\":\"\",\"verifiedAt\":null},\"apiDocs\":{\"enabled\":true}}')" > /dev/null 2>&1
+set_system_config_disabled
 COOKIE_JAR=$(mktemp)
-LOGIN_PAYLOAD=$(printf '{"token":"%s"}' "$ADMIN_TOKEN")
 
 R=$(do_post "$API/api/admin/auth/login" -H "Content-Type: application/json" -c "$COOKIE_JAR" -d "$LOGIN_PAYLOAD")
 assert_http "admin login → 200" "200" "\"requiresVerification\":false" "$R"
@@ -260,6 +274,32 @@ R=$(do_get -b "$COOKIE_JAR" "$API/api/admin/channel")
 assert_http "admin cookie invalid after logout" "401" "Unauthorized" "$R"
 
 rm -f "$COOKIE_JAR"
+
+# ---- Admin anti-bruteforce ----
+echo ""
+echo "--- Admin anti-bruteforce ---"
+
+set_system_config_disabled
+LIMIT_IP="203.0.113.70"
+"${DB_EXEC[@]}" "DELETE FROM admin_rate_limit" > /dev/null 2>&1
+for attempt in 1 2 3 4 5; do
+  R=$(do_post "$API/api/admin/auth/login" -H "Content-Type: application/json" -H "CF-Connecting-IP: $LIMIT_IP" -d '{"token":"bad-token"}')
+  assert_http "admin invalid token attempt $attempt → 401" "401" "管理员令牌无效" "$R"
+done
+R=$(do_post "$API/api/admin/auth/login" -H "Content-Type: application/json" -H "CF-Connecting-IP: $LIMIT_IP" -d '{"token":"bad-token"}')
+assert_http "admin invalid token freeze → 429" "429" "管理员登录失败次数过多" "$R"
+
+# ---- Telegram notification throttle ----
+echo ""
+echo "--- Telegram notification throttle ---"
+
+THROTTLE_IP="203.0.113.71"
+THROTTLE_UNTIL=$(date -u -d "+15 minutes" +"%Y-%m-%dT%H:%M:%SZ")
+set_system_config_with_telegram "dummy-bot-token" "123456"
+"${DB_EXEC[@]}" "DELETE FROM admin_rate_limit" > /dev/null 2>&1
+seed_blocked_rate_limit "admin-telegram-code:ip" "$THROTTLE_IP" 99 "$THROTTLE_UNTIL"
+R=$(do_post "$API/api/admin/auth/login" -H "Content-Type: application/json" -H "CF-Connecting-IP: $THROTTLE_IP" -d "$LOGIN_PAYLOAD")
+assert_http "telegram code notification throttle → 429" "429" "验证码发送过于频繁" "$R"
 
 # ---- Error recovery ----
 echo ""
@@ -284,6 +324,7 @@ done
 for key in sk-mock-all sk-mock-openai sk-mock-quota; do
   "${DB_EXEC[@]}" "DELETE FROM api_token WHERE key = '$key'" > /dev/null 2>&1
 done
+"${DB_EXEC[@]}" "DELETE FROM admin_rate_limit; DELETE FROM admin_login_challenge; DELETE FROM admin_session; DELETE FROM settings WHERE key = 'SYSTEM_CONFIG'" > /dev/null 2>&1
 echo "Cleanup done."
 
 exit $FAIL

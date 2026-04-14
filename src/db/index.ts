@@ -46,10 +46,25 @@ CREATE TABLE IF NOT EXISTS admin_session (
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
+CREATE TABLE IF NOT EXISTS admin_rate_limit (
+    bucket_key TEXT PRIMARY KEY,
+    category TEXT NOT NULL,
+    bucket_id TEXT NOT NULL,
+    window_started_at TEXT NOT NULL,
+    attempts INTEGER DEFAULT 0,
+    blocked_until TEXT,
+    last_event_at TEXT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
 CREATE INDEX IF NOT EXISTS idx_admin_login_challenge_expires_at
     ON admin_login_challenge (expires_at);
 CREATE INDEX IF NOT EXISTS idx_admin_session_expires_at
     ON admin_session (expires_at);
+CREATE INDEX IF NOT EXISTS idx_admin_rate_limit_category_bucket
+    ON admin_rate_limit (category, bucket_id);
+CREATE INDEX IF NOT EXISTS idx_admin_rate_limit_blocked_until
+    ON admin_rate_limit (blocked_until);
 `
 
 let dbReadyPromise: Promise<void> | null = null;
