@@ -12,6 +12,7 @@ import {
     saveSystemConfig,
 } from "../system-config";
 import { sendTelegramTestNotification } from "./auth_shared";
+import { t } from "../i18n";
 
 const adminSecurityConfigSchema = z.object({
     enabled: z.boolean(),
@@ -41,12 +42,12 @@ const telegramTestResponseSchema = z.object({
     verifiedAt: z.string(),
 });
 
-const ensureSystemConfigValid = (config: SystemConfig) => {
+const ensureSystemConfigValid = (config: SystemConfig, lang: string) => {
     if (
         config.adminSecurity.enabled
         && !isTelegramSecurityEnabled(config.adminSecurity)
     ) {
-        throw new Error("开启 Telegram 验证前，请先填写 Bot Token 和 Chat ID");
+        throw new Error(t(lang, "system.telegramConfigRequired"));
     }
 };
 
@@ -90,12 +91,13 @@ export class SystemConfigUpdateEndpoint extends OpenAPIRoute {
     async handle(c: Context<HonoCustomType>) {
         const body = await c.req.json<SystemConfig>();
         const config = normalizeSystemConfig(body);
+        const lang = c.get('lang') || 'zh-CN';
 
         try {
-            ensureSystemConfigValid(config);
+            ensureSystemConfigValid(config, lang);
         } catch (error) {
             return c.text(
-                error instanceof Error ? error.message : "系统设置无效",
+                error instanceof Error ? error.message : t(lang, "system.configInvalid"),
                 400
             );
         }
@@ -128,11 +130,12 @@ export class TelegramTestMessageEndpoint extends OpenAPIRoute {
     };
 
     async handle(c: Context<HonoCustomType>) {
+        const lang = c.get('lang') || 'zh-CN';
         const parsedBody = telegramTestRequestSchema.safeParse(
             await c.req.json<Pick<AdminSecurityConfig, "telegramBotToken" | "telegramChatId">>()
         );
         if (!parsedBody.success) {
-            return c.text(parsedBody.error.issues[0]?.message || "Telegram 配置无效", 400);
+            return c.text(parsedBody.error.issues[0]?.message || t(lang, "system.telegramConfigInvalid"), 400);
         }
 
         const body = parsedBody.data;
@@ -142,14 +145,16 @@ export class TelegramTestMessageEndpoint extends OpenAPIRoute {
         } satisfies AdminSecurityConfig;
 
         if (!isTelegramSecurityEnabled(securityConfig)) {
-            return c.text("请先填写有效的 Bot Token 和 Chat ID", 400);
+            return c.text(t(lang, "system.fillBotTokenAndChatId"), 400);
         }
 
         try {
             await sendTelegramTestNotification(securityConfig, c);
         } catch (error) {
             return c.text(
-                `Telegram 测试消息发送失败：${error instanceof Error ? error.message : "unknown error"}`,
+                t(lang, "system.telegramTestFailed", {
+                    error: error instanceof Error ? error.message : "unknown error",
+                }),
                 500
             );
         }

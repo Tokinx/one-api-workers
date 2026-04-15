@@ -6,6 +6,7 @@ import { api as adminApi } from './admin'
 import { fromHono } from 'chanfana';
 import db from './db';
 import { getSystemConfig } from './system-config';
+import { resolveLanguage } from './i18n';
 
 const FRONTEND_ENTRY = '/'
 const FRONTEND_STATIC_PATHS = new Set([
@@ -99,6 +100,12 @@ const openapi = fromHono(app, {
 
 // cors
 openapi.use('/*', cors());
+
+app.use('*', async (c, next) => {
+    const lang = resolveLanguage(c)
+    c.set('lang', lang)
+    await next()
+})
 
 app.use('*', async (c, next) => {
     const requestUrl = new URL(c.req.url)

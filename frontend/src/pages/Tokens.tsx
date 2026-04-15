@@ -32,6 +32,7 @@ import {
 } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { PageContainer } from "@/components/ui/page-container";
+import { useTranslation } from "react-i18next";
 
 type EditMode = "form" | "json";
 const UNLIMITED_TOKEN_QUOTA = -1;
@@ -80,17 +81,9 @@ const isUnlimitedTokenQuota = (value: number): boolean => {
   return value === UNLIMITED_TOKEN_QUOTA;
 };
 
-const tokenQuotaOptions = [
-  { label: "不限制", value: UNLIMITED_TOKEN_QUOTA },
-  { label: "$10", value: usdToRawBilling(10) },
-  { label: "$20", value: usdToRawBilling(20) },
-  { label: "$50", value: usdToRawBilling(50) },
-  { label: "$100", value: usdToRawBilling(100) },
-] as const;
-
-const formatAvailableQuota = (value: number): string => {
+const formatAvailableQuota = (value: number, unlimitedLabel: string): string => {
   if (isUnlimitedTokenQuota(value)) {
-    return "无限";
+    return unlimitedLabel;
   }
 
   const usdValue = Math.max(0, Math.floor(rawBillingToUsd(value)));
@@ -98,6 +91,7 @@ const formatAvailableQuota = (value: number): string => {
 };
 
 export function Tokens({ createMode = false, editRoute = false }: { createMode?: boolean; editRoute?: boolean }) {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const { key: routeKey } = useParams<{ key: string }>();
   const isRouteEdit = editRoute && Boolean(routeKey);
@@ -121,6 +115,14 @@ export function Tokens({ createMode = false, editRoute = false }: { createMode?:
   const queryClient = useQueryClient();
   const { data: billingConfig } = useBillingConfig();
   const displayDecimals = billingConfig?.displayDecimals ?? DEFAULT_BILLING_DISPLAY_DECIMALS;
+
+  const tokenQuotaOptions = [
+    { label: t('tokens.quotaUnlimited'), value: UNLIMITED_TOKEN_QUOTA },
+    { label: "$10", value: usdToRawBilling(10) },
+    { label: "$20", value: usdToRawBilling(20) },
+    { label: "$50", value: usdToRawBilling(50) },
+    { label: "$100", value: usdToRawBilling(100) },
+  ] as const;
 
   const { data, isLoading, isFetching, refetch } = useQuery({
     queryKey: ["tokens"],
@@ -172,11 +174,11 @@ export function Tokens({ createMode = false, editRoute = false }: { createMode?:
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["tokens"] });
-      addToast(editingKey ? "令牌更新成功" : "令牌添加成功", "success");
+      addToast(editingKey ? t('tokens.updateSuccess') : t('tokens.addSuccess'), "success");
       closeForm();
     },
     onError: (error: any) => {
-      addToast("保存失败：" + error.message, "error");
+      addToast(t('common.saveFailed', { message: error.message }), "error");
     },
   });
 
@@ -186,10 +188,10 @@ export function Tokens({ createMode = false, editRoute = false }: { createMode?:
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["tokens"] });
-      addToast("令牌已删除", "success");
+      addToast(t('tokens.deleteSuccess'), "success");
     },
     onError: (error: any) => {
-      addToast("删除失败：" + error.message, "error");
+      addToast(t('common.deleteFailed', { message: error.message }), "error");
     },
   });
 
@@ -199,10 +201,10 @@ export function Tokens({ createMode = false, editRoute = false }: { createMode?:
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["tokens"] });
-      addToast("已用额度已重置", "success");
+      addToast(t('tokens.resetSuccess'), "success");
     },
     onError: (error: any) => {
-      addToast("重置失败：" + error.message, "error");
+      addToast(t('tokens.resetFailed', { message: error.message }), "error");
     },
   });
 
@@ -234,7 +236,7 @@ export function Tokens({ createMode = false, editRoute = false }: { createMode?:
       if (!targetToken) {
         resetForm();
         setView("list");
-        addToast("未找到对应令牌", "error");
+        addToast(t('tokens.notFound'), "error");
         navigate("/tokens", { replace: true });
         return;
       }
@@ -245,7 +247,7 @@ export function Tokens({ createMode = false, editRoute = false }: { createMode?:
 
     resetForm();
     setView("list");
-  }, [addToast, createMode, data, isLoading, isRouteEdit, navigate, openTokenForEdit, resetForm, routeKey]);
+  }, [addToast, createMode, data, isLoading, isRouteEdit, navigate, openTokenForEdit, resetForm, routeKey, t]);
 
   const closeForm = () => {
     resetForm();
@@ -266,13 +268,13 @@ export function Tokens({ createMode = false, editRoute = false }: { createMode?:
   };
 
   const handleDelete = (key: string) => {
-    if (confirm(`确定要删除此令牌吗？`)) {
+    if (confirm(t('tokens.deleteConfirm'))) {
       deleteMutation.mutate(key);
     }
   };
 
   const handleResetUsage = (key: string) => {
-    if (confirm(`确定要重置此令牌的已用额度吗？`)) {
+    if (confirm(t('tokens.resetConfirm'))) {
       resetUsageMutation.mutate(key);
     }
   };
@@ -280,22 +282,22 @@ export function Tokens({ createMode = false, editRoute = false }: { createMode?:
   const handleCopy = async (text: string) => {
     try {
       await copyToClipboard(text);
-      addToast("已复制到剪贴板", "success");
+      addToast(t('common.copiedToClipboard'), "success");
     } catch {
-      addToast("复制失败", "error");
+      addToast(t('common.copyFailed'), "error");
     }
   };
 
   const handleSave = () => {
     if (!tokenKey) {
-      addToast("请填写令牌标识", "error");
+      addToast(t('tokens.fillTokenKey'), "error");
       return;
     }
 
     let config: any;
     if (editMode === "form") {
       if (!formData.name) {
-        addToast("请填写令牌名称", "error");
+        addToast(t('tokens.fillTokenName'), "error");
         return;
       }
       config = {
@@ -308,7 +310,7 @@ export function Tokens({ createMode = false, editRoute = false }: { createMode?:
         config = JSON.parse(jsonValue);
         config.total_quota = normalizeTokenQuota(config.total_quota);
       } catch {
-        addToast("JSON格式错误", "error");
+        addToast(t('common.jsonFormatError'), "error");
         return;
       }
     }
@@ -337,7 +339,7 @@ export function Tokens({ createMode = false, editRoute = false }: { createMode?:
         setQuotaInputValue(formatQuotaInputValue(normalizedConfig.total_quota));
         setEditMode("form");
       } catch {
-        addToast("JSON格式错误", "error");
+        addToast(t('common.jsonFormatError'), "error");
       }
     }
   };
@@ -361,8 +363,8 @@ export function Tokens({ createMode = false, editRoute = false }: { createMode?:
   if (view === "list") {
     return (
       <PageContainer
-        title="令牌管理"
-        description="管理 API 访问令牌和配额"
+        title={t('tokens.title')}
+        description={t('tokens.description')}
         actions={
           <div className="flex items-center gap-2">
             <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching}>
@@ -370,7 +372,7 @@ export function Tokens({ createMode = false, editRoute = false }: { createMode?:
             </Button>
             <Button size="sm" onClick={handleAdd}>
               <Plus className="h-4 w-4" />
-              <span className="hidden sm:inline ml-1">添加</span>
+              <span className="hidden sm:inline ml-1">{t('common.add')}</span>
             </Button>
           </div>
         }
@@ -381,7 +383,7 @@ export function Tokens({ createMode = false, editRoute = false }: { createMode?:
             <div className="relative max-w-sm">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="搜索令牌..."
+                placeholder={t('tokens.searchPlaceholder')}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-9"
@@ -394,7 +396,7 @@ export function Tokens({ createMode = false, editRoute = false }: { createMode?:
           <div className="flex items-center justify-center py-20">
             <div className="flex flex-col items-center gap-3">
               <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-              <span className="text-sm text-muted-foreground">加载中...</span>
+              <span className="text-sm text-muted-foreground">{t('common.loading')}</span>
             </div>
           </div>
         ) : !data || data.length === 0 ? (
@@ -403,13 +405,13 @@ export function Tokens({ createMode = false, editRoute = false }: { createMode?:
               <div className="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center mb-4">
                 <Key className="h-7 w-7 text-primary" />
               </div>
-              <h3 className="font-semibold text-lg mb-2">创建您的第一个令牌</h3>
+              <h3 className="font-semibold text-lg mb-2">{t('tokens.emptyTitle')}</h3>
               <p className="text-muted-foreground text-sm text-center max-w-sm mb-6">
-                令牌用于验证 API 请求。每个令牌可以设置独立的访问权限和使用配额。
+                {t('tokens.emptyDescription')}
               </p>
               <Button onClick={handleAdd} size="lg">
                 <Plus className="h-4 w-4 mr-2" />
-                添加令牌
+                {t('tokens.addToken')}
               </Button>
             </CardContent>
           </Card>
@@ -467,21 +469,21 @@ export function Tokens({ createMode = false, editRoute = false }: { createMode?:
                                 onClick={() => handleEdit(token)}
                               >
                                 <Pencil className="h-4 w-4" />
-                                编辑
+                                {t('common.edit')}
                               </button>
                               <button
                                 className="w-full px-3 py-2 text-sm text-left hover:bg-muted flex items-center gap-2"
                                 onClick={() => handleResetUsage(token.key)}
                               >
                                 <RotateCcw className="h-4 w-4" />
-                                重置额度
+                                {t('tokens.resetQuota')}
                               </button>
                               <button
                                 className="w-full px-3 py-2 text-sm text-left hover:bg-muted flex items-center gap-2 text-destructive"
                                 onClick={() => handleDelete(token.key)}
                               >
                                 <Trash2 className="h-4 w-4" />
-                                删除
+                                {t('common.delete')}
                               </button>
                             </div>
                           )}
@@ -489,15 +491,15 @@ export function Tokens({ createMode = false, editRoute = false }: { createMode?:
                       </div>
                       <div className="flex items-center gap-4 text-sm">
                         <span className="text-muted-foreground">
-                          渠道:{" "}
+                          {t('tokens.channels')}:{" "}
                           <span className="text-foreground">
-                            {channelKeys.length === 0 ? "全部" : `${channelKeys.length}个`}
+                            {channelKeys.length === 0 ? t('tokens.channelsAll') : t('tokens.channelsCount', { count: channelKeys.length })}
                           </span>
                         </span>
                         <span className="text-muted-foreground">
-                          已用/可用:{" "}
+                          {t('tokens.usedAvailable')}:{" "}
                           <span className="text-foreground">
-                            {formatCurrency(usedQuota, displayDecimals)}/{formatAvailableQuota(availableQuota)}
+                            {formatCurrency(usedQuota, displayDecimals)}/{formatAvailableQuota(availableQuota, t('common.unlimited'))}
                           </span>
                         </span>
                       </div>
@@ -527,13 +529,13 @@ export function Tokens({ createMode = false, editRoute = false }: { createMode?:
                       </div>
                       <div className="w-24 text-sm text-center flex-shrink-0">
                         <span className="px-2 py-1 rounded-md bg-muted text-muted-foreground">
-                          {channelKeys.length === 0 ? "全部" : `${channelKeys.length} 渠道`}
+                          {channelKeys.length === 0 ? t('tokens.channelsAll') : t('tokens.channelsCountWithUnit', { count: channelKeys.length })}
                         </span>
                       </div>
                       <div className="w-48 flex-shrink-0">
                         <div className="flex items-center justify-between text-xs mb-1">
                           <span className="text-muted-foreground">
-                            {formatCurrency(usedQuota, displayDecimals)} / {formatAvailableQuota(availableQuota)}
+                            {formatCurrency(usedQuota, displayDecimals)} / {formatAvailableQuota(availableQuota, t('common.unlimited'))}
                           </span>
                           <span
                             className={cn(
@@ -564,7 +566,7 @@ export function Tokens({ createMode = false, editRoute = false }: { createMode?:
                           size="icon"
                           className="h-8 w-8"
                           onClick={() => handleEdit(token)}
-                          title="编辑"
+                          title={t('common.edit')}
                         >
                           <Pencil className="h-4 w-4" />
                         </Button>
@@ -573,7 +575,7 @@ export function Tokens({ createMode = false, editRoute = false }: { createMode?:
                           size="icon"
                           className="h-8 w-8"
                           onClick={() => handleResetUsage(token.key)}
-                          title="重置额度"
+                          title={t('tokens.resetQuota')}
                         >
                           <RotateCcw className="h-4 w-4" />
                         </Button>
@@ -582,7 +584,7 @@ export function Tokens({ createMode = false, editRoute = false }: { createMode?:
                           size="icon"
                           className="h-8 w-8 text-destructive hover:text-destructive"
                           onClick={() => handleDelete(token.key)}
-                          title="删除"
+                          title={t('common.delete')}
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>
@@ -592,7 +594,7 @@ export function Tokens({ createMode = false, editRoute = false }: { createMode?:
                 );
               })}
               {filteredData?.length === 0 && searchQuery && (
-                <div className="p-8 text-center text-muted-foreground">未找到匹配的令牌</div>
+                <div className="p-8 text-center text-muted-foreground">{t('tokens.noMatchingTokens')}</div>
               )}
             </div>
           </Card>
@@ -607,7 +609,7 @@ export function Tokens({ createMode = false, editRoute = false }: { createMode?:
         <div className="max-w-2xl mx-auto flex items-center justify-center py-20">
           <div className="flex flex-col items-center gap-3">
             <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-            <span className="text-sm text-muted-foreground">加载令牌中...</span>
+            <span className="text-sm text-muted-foreground">{t('tokens.loadingToken')}</span>
           </div>
         </div>
       </div>
@@ -622,13 +624,13 @@ export function Tokens({ createMode = false, editRoute = false }: { createMode?:
         <div className="mb-6">
           <Button variant="ghost" size="sm" className="mb-3 -ml-2 text-muted-foreground" onClick={closeForm}>
             <ArrowLeft className="h-4 w-4 mr-1" />
-            返回列表
+            {t('common.back')}
           </Button>
           <div className="flex items-center justify-between">
-            <h1 className="text-2xl font-bold tracking-tight">{editingKey ? "编辑令牌" : "添加令牌"}</h1>
+            <h1 className="text-2xl font-bold tracking-tight">{editingKey ? t('tokens.editToken') : t('tokens.addToken')}</h1>
             <Button variant="outline" size="sm" onClick={toggleEditMode}>
               {editMode === "form" ? <FileJson className="h-4 w-4 mr-1" /> : <FileText className="h-4 w-4 mr-1" />}
-              {editMode === "form" ? "JSON" : "表单"}
+              {editMode === "form" ? t('common.json') : t('common.form')}
             </Button>
           </div>
         </div>
@@ -637,8 +639,8 @@ export function Tokens({ createMode = false, editRoute = false }: { createMode?:
           {/* Token Key Section */}
           <Card>
             <CardContent className="p-5">
-              <h3 className="font-medium mb-1">令牌标识</h3>
-              <p className="text-sm text-muted-foreground mb-3">用于 API 认证的唯一标识</p>
+              <h3 className="font-medium mb-1">{t('tokens.tokenKey')}</h3>
+              <p className="text-sm text-muted-foreground mb-3">{t('tokens.tokenKeyDesc')}</p>
               <div className="flex gap-2">
                 <Input
                   value={tokenKey}
@@ -661,16 +663,16 @@ export function Tokens({ createMode = false, editRoute = false }: { createMode?:
               {/* Basic Info */}
               <Card>
                 <CardContent className="p-5">
-                  <h3 className="font-medium mb-4">基本信息</h3>
+                  <h3 className="font-medium mb-4">{t('tokens.basicInfo')}</h3>
                   <div className="space-y-4">
                     <div className="space-y-2">
                       <Label className="text-sm">
-                        令牌名称 <span className="text-destructive">*</span>
+                        {t('tokens.tokenNameRequired')} <span className="text-destructive">*</span>
                       </Label>
                       <Input
                         value={formData.name}
                         onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                        placeholder="例如：生产环境、测试用户"
+                        placeholder={t('tokens.tokenNamePlaceholder')}
                       />
                     </div>
                   </div>
@@ -682,11 +684,11 @@ export function Tokens({ createMode = false, editRoute = false }: { createMode?:
                 <CardContent className="p-5">
                   <div className="flex items-center justify-between mb-4">
                     <div>
-                      <h3 className="font-medium">渠道访问权限</h3>
+                      <h3 className="font-medium">{t('tokens.channelAccess')}</h3>
                       <p className="text-sm text-muted-foreground">
                         {selectedChannels.length === 0
-                          ? "允许访问所有渠道"
-                          : `已选择 ${selectedChannels.length} 个渠道`}
+                          ? t('tokens.channelAccessAll')
+                          : t('tokens.channelAccessSelected', { count: selectedChannels.length })}
                       </p>
                     </div>
                   </div>
@@ -694,8 +696,8 @@ export function Tokens({ createMode = false, editRoute = false }: { createMode?:
                     <div className="flex items-center gap-3 p-4 bg-muted/50 rounded-lg">
                       <AlertCircle className="h-5 w-5 text-muted-foreground" />
                       <div>
-                        <p className="text-sm font-medium">暂无可用渠道</p>
-                        <p className="text-xs text-muted-foreground">请先在渠道管理中添加渠道</p>
+                        <p className="text-sm font-medium">{t('tokens.noChannels')}</p>
+                        <p className="text-xs text-muted-foreground">{t('tokens.noChannelsHint')}</p>
                       </div>
                     </div>
                   ) : (
@@ -725,8 +727,8 @@ export function Tokens({ createMode = false, editRoute = false }: { createMode?:
               {/* Quota */}
               <Card>
                 <CardContent className="p-5">
-                  <h3 className="font-medium mb-1">可用额度</h3>
-                  <p className="text-sm text-muted-foreground mb-4">额度耗尽后将不可调用付费模型。</p>
+                  <h3 className="font-medium mb-1">{t('tokens.quota')}</h3>
+                  <p className="text-sm text-muted-foreground mb-4">{t('tokens.quotaHint')}</p>
                   <div className="space-y-4">
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-center">
                       <Input
@@ -755,10 +757,10 @@ export function Tokens({ createMode = false, editRoute = false }: { createMode?:
                         onBlur={() => {
                           setQuotaInputValue(formatQuotaInputValue(normalizeTokenQuota(formData.total_quota)));
                         }}
-                        placeholder="输入美元额度，0 表示无额度，-1 表示无限"
+                        placeholder={t('tokens.quotaPlaceholder')}
                       />
                       <ButtonGroup
-                        aria-label="令牌可用额度"
+                        aria-label={t('tokens.quota')}
                         value={normalizeTokenQuota(formData.total_quota)}
                         options={tokenQuotaOptions}
                         onValueChange={(value) => {
@@ -776,13 +778,13 @@ export function Tokens({ createMode = false, editRoute = false }: { createMode?:
           ) : (
             <Card>
               <CardContent className="p-5">
-                <h3 className="font-medium mb-4">JSON 配置</h3>
+                <h3 className="font-medium mb-4">{t('channels.jsonConfig')}</h3>
                 <Textarea
                   value={jsonValue}
                   onChange={(e) => setJsonValue(e.target.value)}
                   rows={14}
                   className="font-mono text-sm"
-                  placeholder='{"name": "令牌名称", "channel_keys": [], "total_quota": -1}'
+                  placeholder='{"name": "Token Name", "channel_keys": [], "total_quota": -1}'
                 />
               </CardContent>
             </Card>
@@ -791,18 +793,18 @@ export function Tokens({ createMode = false, editRoute = false }: { createMode?:
           {/* Actions */}
           <div className="flex items-center justify-end gap-3 pt-2">
             <Button variant="outline" onClick={closeForm}>
-              取消
+              {t('common.cancel')}
             </Button>
             <Button onClick={handleSave} disabled={saveMutation.isPending}>
               {saveMutation.isPending ? (
                 <>
                   <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                  保存中...
+                  {t('common.saving')}
                 </>
               ) : (
                 <>
                   <Check className="h-4 w-4 mr-2" />
-                  保存令牌
+                  {t('tokens.saveToken')}
                 </>
               )}
             </Button>

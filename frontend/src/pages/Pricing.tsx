@@ -20,6 +20,8 @@ import {
 import { cn } from "@/lib/utils";
 import { Check, FileJson, FileText, RefreshCw, Search } from "lucide-react";
 import { PageContainer } from "@/components/ui/page-container";
+import { useTranslation } from "react-i18next";
+import i18n from "@/i18n";
 
 type EditMode = "cards" | "json";
 type PricingField = "input" | "output" | "cache";
@@ -54,45 +56,6 @@ type SaveState = "idle" | "saving" | "saved" | "error" | "invalid";
 type BuildPricingRowsOptions = {
   sortConfiguredFirst?: boolean;
 };
-
-const FIELD_META: Array<{
-  key: PricingField;
-  label: string;
-  placeholder: string;
-}> = [
-  {
-    key: "input",
-    label: "输入",
-    placeholder: "0.000000",
-  },
-  {
-    key: "output",
-    label: "输出",
-    placeholder: "0.000000",
-  },
-  {
-    key: "cache",
-    label: "缓存",
-    placeholder: "0.000000",
-  },
-];
-
-const BILLING_MODE_OPTIONS: Array<{
-  value: PricingBillingMode;
-  label: string;
-  description: string;
-}> = [
-  {
-    value: "volume",
-    label: "按量",
-    description: "输入 / 输出 / 缓存按每 M tokens 计费",
-  },
-  {
-    value: "request",
-    label: "按次",
-    description: "成功响应后按固定金额计费",
-  },
-];
 
 const normalizePricingNumber = (value: unknown, fallback = 0): number => {
   const parsed =
@@ -136,7 +99,6 @@ const normalizePricingEntry = (pricing?: Partial<PricingModel> | null): PricingR
   const billingMode = normalizePricingBillingMode(pricing?.billingMode);
   const hasVisiblePricing = input > 0 || output > 0 || cache > 0;
 
-  // 旧版仅配置了独立 request 时，直接映射成新版按次计费。
   if (!billingMode && legacyRequest > 0 && !hasVisiblePricing) {
     return {
       model: "",
@@ -259,9 +221,11 @@ const formatEstimatedPricingCost = (
   pricing: Pick<PricingRow, "billingMode" | "input" | "output" | "cache">,
 ): string => {
   const estimatedCost = calculateEstimatedPricingCost(pricing).toFixed(PRICING_DECIMALS);
-  const unitLabel = pricing.billingMode === "request" ? "/ 次" : "/ 1M tokens";
+  const unitLabel = pricing.billingMode === "request"
+    ? i18n.t('pricing.estimatedCostRequest', { cost: estimatedCost })
+    : i18n.t('pricing.estimatedCostVolume', { cost: estimatedCost });
 
-  return `$${estimatedCost} ${unitLabel}`;
+  return unitLabel;
 };
 
 const buildModelChannelMap = (channels: Channel[]): Map<string, ChannelRef[]> => {
@@ -394,6 +358,8 @@ function MultiSelectAutocompleteField({
   options,
   emptyText,
 }: MultiSelectAutocompleteFieldProps) {
+  const { t } = useTranslation();
+
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between">
@@ -404,7 +370,7 @@ function MultiSelectAutocompleteField({
             onClick={() => onChange([])}
             className="text-xs text-muted-foreground hover:text-foreground"
           >
-            清空
+            {t('common.clearAll')}
           </button>
         )}
       </div>
@@ -423,6 +389,7 @@ function MultiSelectAutocompleteField({
 }
 
 export function Pricing() {
+  const { t } = useTranslation();
   const [editMode, setEditMode] = useState<EditMode>("cards");
   const [jsonValue, setJsonValue] = useState("");
   const [pricingRows, setPricingRows] = useState<PricingRow[]>([]);
@@ -440,6 +407,25 @@ export function Pricing() {
   const hasHydratedRef = useRef(false);
   const lastSavedSignatureRef = useRef(JSON.stringify({}));
   const skipNextPricingSyncRef = useRef(false);
+
+  const FIELD_META: Array<{
+    key: PricingField;
+    label: string;
+    placeholder: string;
+  }> = [
+    { key: "input", label: t('pricing.fieldInput'), placeholder: "0.000000" },
+    { key: "output", label: t('pricing.fieldOutput'), placeholder: "0.000000" },
+    { key: "cache", label: t('pricing.fieldCache'), placeholder: "0.000000" },
+  ];
+
+  const BILLING_MODE_OPTIONS = useMemo<Array<{
+    value: PricingBillingMode;
+    label: string;
+    description: string;
+  }>>(() => [
+    { value: "volume", label: t('pricing.billingVolume'), description: t('pricing.billingVolumeDesc') },
+    { value: "request", label: t('pricing.billingRequest'), description: t('pricing.billingRequestDesc') },
+  ], [t]);
 
   const pricingQuery = useQuery({
     queryKey: ["pricing"],
@@ -515,13 +501,13 @@ export function Pricing() {
       setLastSavedAt(new Date());
 
       if (variables.source === "manual") {
-        addToast("定价配置已保存", "success");
+        addToast(t('pricing.savedSuccess'), "success");
       }
     },
     onError: (error: Error, variables) => {
       setSaveState("error");
       if (variables.source === "manual") {
-        addToast(`保存失败：${error.message}`, "error");
+        addToast(t('common.saveFailed', { message: error.message }), "error");
       }
     },
   });
@@ -570,7 +556,7 @@ export function Pricing() {
       description: option.description,
       keywords: [option.value, option.label, option.description],
     }));
-  }, []);
+  }, [BILLING_MODE_OPTIONS]);
 
   const pricingCards = useMemo(() => {
     return pricingRows.map((row) => {
@@ -594,7 +580,7 @@ export function Pricing() {
         searchTarget,
       };
     });
-  }, [modelChannelMap, modelTokenMap, pricingRows]);
+  }, [modelChannelMap, modelTokenMap, pricingRows, BILLING_MODE_OPTIONS]);
 
   useEffect(() => {
     setSelectedChannels((current) =>
@@ -749,7 +735,7 @@ export function Pricing() {
       });
     } catch {
       setSaveState("invalid");
-      addToast("JSON 格式错误", "error");
+      addToast(t('common.jsonFormatError'), "error");
     }
   };
 
@@ -765,7 +751,7 @@ export function Pricing() {
       setPricingRows(buildPricingRows(modelChannelMap, parsed, { sortConfiguredFirst: true }));
       setEditMode("cards");
     } catch {
-      addToast("JSON 格式错误", "error");
+      addToast(t('common.jsonFormatError'), "error");
     }
   };
 
@@ -803,20 +789,20 @@ export function Pricing() {
   const saveHint = (() => {
     switch (saveState) {
       case "saving":
-        return "自动保存中...";
+        return t('common.autoSaving');
       case "error":
-        return "自动保存失败";
+        return t('common.autoSaveFailed');
       case "invalid":
-        return "JSON 无法自动保存";
+        return t('common.jsonCannotAutoSave');
       default:
-        return `保存于 ${formatSaveTime(lastSavedAt)}`;
+        return t('common.savedAt', { time: formatSaveTime(lastSavedAt) });
     }
   })();
 
   return (
     <PageContainer
-      title="定价管理"
-      description="展示和配置系统模型价格"
+      title={t('pricing.title')}
+      description={t('pricing.description')}
       actions={
         <div className="flex items-center gap-2">
           <span className="hidden text-xs text-muted-foreground md:inline">{saveHint}</span>
@@ -825,11 +811,11 @@ export function Pricing() {
           </Button>
           <Button variant="outline" size="sm" onClick={toggleEditMode}>
             {editMode === "cards" ? <FileJson className="h-4 w-4" /> : <FileText className="h-4 w-4" />}
-            <span className="hidden sm:inline ml-1">{editMode === "cards" ? "JSON" : "卡片"}</span>
+            <span className="hidden sm:inline ml-1">{editMode === "cards" ? t('common.json') : t('pricing.cards')}</span>
           </Button>
           <Button size="sm" onClick={handleSave} disabled={saveMutation.isPending}>
             <Check className="h-4 w-4 mr-1" />
-            保存
+            {t('common.save')}
           </Button>
         </div>
       }
@@ -838,40 +824,40 @@ export function Pricing() {
         <Card className="border-0 p-6">
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             <MultiSelectAutocompleteField
-              label="渠道筛选"
-              placeholder="选择渠道"
+              label={t('pricing.channelFilter')}
+              placeholder={t('pricing.channelFilterPlaceholder')}
               selectedValues={selectedChannels}
               onChange={setSelectedChannels}
               options={channelOptions}
-              emptyText="没有匹配渠道"
+              emptyText={t('pricing.noMatchingChannels')}
             />
 
             <MultiSelectAutocompleteField
-              label="收费类型"
-              placeholder="选择收费类型"
+              label={t('pricing.billingTypeFilter')}
+              placeholder={t('pricing.billingTypePlaceholder')}
               selectedValues={selectedBillingModes}
               onChange={setSelectedBillingModes}
               options={billingModeOptions}
-              emptyText="没有匹配收费类型"
+              emptyText={t('pricing.noMatchingBillingType')}
             />
 
             <MultiSelectAutocompleteField
-              label="令牌筛选"
-              placeholder="选择令牌"
+              label={t('pricing.tokenFilter')}
+              placeholder={t('pricing.tokenFilterPlaceholder')}
               selectedValues={selectedTokens}
               onChange={setSelectedTokens}
               options={tokenOptions}
-              emptyText="没有匹配令牌"
+              emptyText={t('pricing.noMatchingTokens')}
             />
 
             <div className="space-y-2">
-              <Label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">搜索</Label>
+              <Label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{t('common.search')}</Label>
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
                   value={searchQuery}
                   onChange={(event) => setSearchQuery(event.target.value)}
-                  placeholder="搜索模型、渠道、令牌或收费类型"
+                  placeholder={t('pricing.searchPlaceholder')}
                   className="h-10 pl-9"
                 />
               </div>
@@ -884,24 +870,24 @@ export function Pricing() {
             <div className="flex items-center justify-center py-20">
               <div className="flex flex-col items-center gap-3">
                 <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-                <span className="text-sm text-muted-foreground">正在汇总模型、渠道与令牌信息...</span>
+                <span className="text-sm text-muted-foreground">{t('pricing.loadingModels')}</span>
               </div>
             </div>
           ) : pricingCards.length === 0 ? (
             <Card className="border-0 py-16 text-center">
               <CardContent>
-                <div className="text-lg font-semibold">暂无可管理模型</div>
+                <div className="text-lg font-semibold">{t('pricing.noModels')}</div>
                 <p className="mt-2 text-sm text-muted-foreground">
-                  先在渠道管理中同步模型列表，或者切换到 JSON 模式手动补充价格配置。
+                  {t('pricing.noModelsHint')}
                 </p>
               </CardContent>
             </Card>
           ) : filteredCards.length === 0 ? (
             <Card className="border-0 py-16 text-center">
               <CardContent>
-                <div className="text-lg font-semibold">没有匹配的模型卡片</div>
+                <div className="text-lg font-semibold">{t('pricing.noMatchingCards')}</div>
                 <p className="mt-2 text-sm text-muted-foreground">
-                  当前筛选条件过严，建议放宽渠道、令牌、类型或关键词。
+                  {t('pricing.noMatchingCardsHint')}
                 </p>
               </CardContent>
             </Card>
@@ -917,9 +903,9 @@ export function Pricing() {
                       <Badge className={cn("w-3 h-3 p-0", card.isCustomized ? "bg-success" : "bg-background")}></Badge>
                     </div>
                     {card.isCustomized ? (
-                      <p className="text-xs text-muted-foreground/60">预估成本 ≈ {formatEstimatedPricingCost(card)}</p>
+                      <p className="text-xs text-muted-foreground/60">{formatEstimatedPricingCost(card)}</p>
                     ) : (
-                      <p className="text-xs text-muted-foreground/60">免费</p>
+                      <p className="text-xs text-muted-foreground/60">{t('common.free')}</p>
                     )}
                   </CardHeader>
 
@@ -964,8 +950,7 @@ export function Pricing() {
 
                     {card.legacyRequest > 0 && (
                       <p className="text-[11px] leading-5 text-muted-foreground">
-                        兼容旧版独立按次价格 {card.legacyRequest.toFixed(PRICING_DECIMALS)}
-                        ，修改后会切换到新版计费规则。
+                        {t('pricing.legacyRequestNote', { price: card.legacyRequest.toFixed(PRICING_DECIMALS) })}
                       </p>
                     )}
 
@@ -980,7 +965,7 @@ export function Pricing() {
                           </div>
                         ))
                       ) : (
-                        <span className="text-xs text-muted-foreground">无匹配渠道</span>
+                        <span className="text-xs text-muted-foreground">{t('pricing.noChannelsForModel')}</span>
                       )}
                     </div>
                   </CardContent>
@@ -991,10 +976,9 @@ export function Pricing() {
         ) : (
           <Card className="border-0">
             <CardHeader>
-              <CardTitle className="text-lg">JSON 配置</CardTitle>
+              <CardTitle className="text-lg">{t('pricing.jsonConfigTitle')}</CardTitle>
               <CardDescription>
-                默认只会保存大于 0 的价格字段；但 `billingMode: "request"` 即使价格全为
-                0，也会作为有效配置保留。切回卡片模式时，会与当前渠道中的模型集合自动合并。
+                {t('pricing.jsonConfigDesc')}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-2">
@@ -1006,8 +990,7 @@ export function Pricing() {
                 placeholder='{"gpt-4.1": {"billingMode": "volume", "input": 0.8, "output": 3.2}}'
               />
               <p className="text-xs text-muted-foreground">
-                格式：模型名称 → {"{"} billingMode?: "volume" | "request", input?: 输入价格, output?: 输出价格, cache?:
-                缓存价格, request?: 旧版独立按次价格 {"}"}
+                {t('pricing.jsonFormatHint')}
               </p>
             </CardContent>
           </Card>

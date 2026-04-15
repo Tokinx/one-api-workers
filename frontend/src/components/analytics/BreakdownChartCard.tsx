@@ -1,6 +1,7 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { AnalyticsBreakdownItem } from "@/types";
 import { cn, formatCompactNumber, formatCurrency } from "@/lib/utils";
+import { useTranslation } from "react-i18next";
 
 const formatPercent = (value: number): string => `${(value * 100).toFixed(1)}%`;
 
@@ -25,6 +26,7 @@ export function BreakdownChartCard({
   badgeClassName,
   displayDecimals,
 }: BreakdownChartCardProps) {
+  const { t } = useTranslation();
   const visibleItems = items.slice(0, 6);
   const maxRequests = Math.max(...visibleItems.map((item) => item.requests), 1);
 
@@ -44,11 +46,11 @@ export function BreakdownChartCard({
           ))
         ) : isError ? (
           <div className="px-4 py-8 text-center text-sm text-muted-foreground">
-            排行数据加载失败
+            {t('analytics.breakdownLoadFailed')}
           </div>
         ) : visibleItems.length === 0 ? (
           <div className="px-4 py-8 text-center text-sm text-muted-foreground">
-            当前时间范围暂无维度排行数据
+            {t('analytics.breakdownEmpty')}
           </div>
         ) : (
           visibleItems.map((item, index) => {
@@ -71,9 +73,9 @@ export function BreakdownChartCard({
                         {item.label}
 
                         <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                          <span>成功率 {formatPercent(item.successRate)}</span>
-                          <span>消耗 {formatCompactNumber(item.totalTokens)}</span>
-                          <span>费用 {formatCurrency(item.totalCost, displayDecimals)}</span>
+                          <span>{t('analytics.breakdownSuccessRate', { rate: formatPercent(item.successRate) })}</span>
+                          <span>{t('analytics.breakdownTokens', { count: formatCompactNumber(item.totalTokens) })}</span>
+                          <span>{t('analytics.breakdownCost', { cost: formatCurrency(item.totalCost, displayDecimals) })}</span>
                         </div>
                       </div>
                     </div>

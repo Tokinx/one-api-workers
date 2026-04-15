@@ -13,6 +13,7 @@ import { Send, Clock, CheckCircle, XCircle, Copy, Download } from 'lucide-react'
 import { PageContainer } from '@/components/ui/page-container'
 import { cn, copyToClipboard } from '@/lib/utils'
 import { getModelNamesForToken, parseTokenConfig } from '@/lib/channel-models'
+import { useTranslation } from 'react-i18next'
 
 const requestTemplates: Record<string, any> = {
   '/v1/chat/completions': {
@@ -65,6 +66,7 @@ const buildRequestBody = (endpoint: string, model = '') => {
 }
 
 export function ApiTest() {
+  const { t } = useTranslation()
   const [endpoint, setEndpoint] = useState('/v1/chat/completions')
   const [apiToken, setApiToken] = useState('')
   const [modelValue, setModelValue] = useState('')
@@ -132,9 +134,9 @@ export function ApiTest() {
             }
           : response
         await copyToClipboard(JSON.stringify(payload, null, 2))
-        addToast('已复制到剪贴板', 'success')
+        addToast(t('common.copiedToClipboard'), 'success')
       } catch {
-        addToast('复制失败', 'error')
+        addToast(t('common.copyFailed'), 'error')
       }
     }
   }
@@ -174,7 +176,7 @@ export function ApiTest() {
     e.preventDefault()
 
     if (!apiToken) {
-      addToast('请输入 API 令牌', 'error')
+      addToast(t('apiTest.tokenRequired'), 'error')
       return
     }
 
@@ -182,7 +184,7 @@ export function ApiTest() {
     try {
       body = JSON.parse(requestBody)
     } catch {
-      addToast('请求体 JSON 格式错误', 'error')
+      addToast(t('apiTest.bodyJsonError'), 'error')
       return
     }
 
@@ -225,8 +227,8 @@ export function ApiTest() {
 
   return (
     <PageContainer
-      title="API 测试"
-      description="测试 API 连接和配置"
+      title={t('apiTest.title')}
+      description={t('apiTest.description')}
     >
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Request Panel */}
@@ -234,12 +236,12 @@ export function ApiTest() {
           <CardContent className="p-5">
             <div className="flex items-center gap-2 mb-5">
               <div className="w-2 h-2 rounded-full bg-primary" />
-              <h3 className="font-semibold text-sm">请求</h3>
+              <h3 className="font-semibold text-sm">{t('apiTest.request')}</h3>
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
-                <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">端点</Label>
+                <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{t('apiTest.endpoint')}</Label>
                 <Select
                   value={endpoint}
                   onChange={(e) => handleEndpointChange(e.target.value)}
@@ -253,32 +255,32 @@ export function ApiTest() {
               </div>
 
               <div className="space-y-2">
-                <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">API 令牌</Label>
+                <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{t('apiTest.apiToken')}</Label>
                 <AutoCompleteInput
                   value={apiToken}
                   onChange={setApiToken}
                   placeholder="sk-..."
                   inputClassName="font-mono"
                   options={tokenOptions}
-                  emptyText="没有匹配的令牌"
+                  emptyText={t('apiTest.noMatchingTokens')}
                 />
               </div>
 
               <div className="space-y-2">
-                <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">模型</Label>
+                <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{t('apiTest.model')}</Label>
                 <AutoCompleteInput
                   value={modelValue}
                   onChange={updateRequestBodyModel}
-                  placeholder="选择或输入模型名称"
+                  placeholder={t('apiTest.modelPlaceholder')}
                   inputClassName="font-mono"
                   options={modelOptions}
                   maxOptions={availableModels.length}
-                  emptyText="没有匹配的模型"
+                  emptyText={t('apiTest.noMatchingModels')}
                 />
               </div>
 
               <div className="space-y-2">
-                <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">请求体</Label>
+                <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{t('apiTest.requestBody')}</Label>
                 <Textarea
                   value={requestBody}
                   onChange={(e) => handleRequestBodyChange(e.target.value)}
@@ -291,12 +293,12 @@ export function ApiTest() {
                 {isLoading ? (
                   <>
                     <div className="w-4 h-4 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin" />
-                    发送中...
+                    {t('apiTest.sending')}
                   </>
                 ) : (
                   <>
                     <Send className="h-4 w-4" />
-                    发送请求
+                    {t('apiTest.send')}
                   </>
                 )}
               </Button>
@@ -317,7 +319,7 @@ export function ApiTest() {
                   !statusCode ? "bg-muted-foreground/30" :
                   statusCode === 200 ? "bg-success" : "bg-destructive"
                 )} />
-                <h3 className="font-semibold text-sm">响应</h3>
+                <h3 className="font-semibold text-sm">{t('apiTest.response')}</h3>
               </div>
               {statusCode && (
                 <div className="flex items-center gap-2">
@@ -337,7 +339,7 @@ export function ApiTest() {
                     size="icon"
                     className="h-7 w-7"
                     onClick={handleCopyResponse}
-                    title="复制响应"
+                    title={t('apiTest.copyResponse')}
                   >
                     <Copy className="h-3.5 w-3.5" />
                   </Button>
@@ -349,7 +351,7 @@ export function ApiTest() {
               isAudioResponse(response) ? (
                 <div className="space-y-4 rounded-lg bg-muted/50 p-4">
                   <div className="space-y-1">
-                    <div className="text-sm font-medium">音频返回成功</div>
+                    <div className="text-sm font-medium">{t('apiTest.audioSuccess')}</div>
                     <div className="text-xs text-muted-foreground font-mono">
                       {response.contentType} · {response.size} bytes
                     </div>
@@ -358,7 +360,7 @@ export function ApiTest() {
                   <Button asChild variant="outline" size="sm">
                     <a href={response.url} download={response.filename}>
                       <Download className="h-4 w-4" />
-                      下载音频
+                      {t('apiTest.downloadAudio')}
                     </a>
                   </Button>
                 </div>
@@ -370,7 +372,7 @@ export function ApiTest() {
             ) : (
               <div className="flex flex-col items-center justify-center h-[400px] text-muted-foreground/40">
                 <Send className="h-10 w-10 mb-3" />
-                <p className="text-sm">发送请求后在此查看响应</p>
+                <p className="text-sm">{t('apiTest.responseEmpty')}</p>
               </div>
             )}
           </CardContent>

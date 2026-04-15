@@ -3,6 +3,7 @@ import { apiClient } from '@/api/client'
 import { clearScopedCacheByPrefix } from '@/lib/local-cache'
 import { type AdminLoginResponse } from '@/types'
 import { clearAdminCredentials } from '@/lib/admin-auth'
+import i18n from '@/i18n'
 
 interface AuthState {
   isAuthenticated: boolean
@@ -31,7 +32,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       const loginResult = response.data as AdminLoginResponse
 
       if (!loginResult) {
-        throw new Error('登录响应无效')
+        throw new Error(i18n.t('auth.loginResponseInvalid'))
       }
 
       clearAdminCredentials()
@@ -42,7 +43,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       }
 
       if (!loginResult.challengeId) {
-        throw new Error('登录响应缺少验证码挑战信息')
+        throw new Error(i18n.t('auth.loginMissingChallenge'))
       }
 
       set({ isAuthenticated: false, isLoading: false })
@@ -66,7 +67,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       const loginResult = response.data as AdminLoginResponse
 
       if (!loginResult || loginResult.requiresVerification) {
-        throw new Error('验证码验证后未建立会话')
+        throw new Error(i18n.t('auth.verificationSessionFailed'))
       }
 
       clearAdminCredentials()

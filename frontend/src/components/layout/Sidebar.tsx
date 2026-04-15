@@ -8,6 +8,7 @@ import {
   FileText,
   TestTube2,
   GitBranch,
+  Languages,
   Moon,
   Sun,
   LogOut,
@@ -19,25 +20,29 @@ import {
 } from "lucide-react";
 import { useAuthStore } from "@/store/auth";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
+import { changeLanguage, SUPPORTED_LANGUAGES, type SupportedLanguage } from "@/i18n";
 
-type NavGroup = "总览" | "管理" | "工具" | "系统";
+type NavGroup = "overview" | "management" | "tools" | "system";
 
 interface NavItem {
-  title: string;
+  titleKey: string;
   href: string;
   icon: React.ComponentType<{ className?: string }>;
   group: NavGroup;
 }
 
-const navItems: NavItem[] = [
-  { title: "总览看板", href: "/dashboard", icon: BarChart3, group: "总览" },
-  { title: "渠道管理", href: "/channels", icon: LinkIcon, group: "管理" },
-  { title: "令牌管理", href: "/tokens", icon: Key, group: "管理" },
-  { title: "定价管理", href: "/pricing", icon: DollarSign, group: "管理" },
-  { title: "使用日志", href: "/usage-logs", icon: FileText, group: "工具" },
-  { title: "API 测试", href: "/api-test", icon: TestTube2, group: "工具" },
-  { title: "系统设置", href: "/settings", icon: SlidersHorizontal, group: "系统" },
+const navItemDefs: NavItem[] = [
+  { titleKey: "sidebar.dashboard", href: "/dashboard", icon: BarChart3, group: "overview" },
+  { titleKey: "sidebar.channels", href: "/channels", icon: LinkIcon, group: "management" },
+  { titleKey: "sidebar.tokens", href: "/tokens", icon: Key, group: "management" },
+  { titleKey: "sidebar.pricing", href: "/pricing", icon: DollarSign, group: "management" },
+  { titleKey: "sidebar.usageLogs", href: "/usage-logs", icon: FileText, group: "tools" },
+  { titleKey: "sidebar.apiTest", href: "/api-test", icon: TestTube2, group: "tools" },
+  { titleKey: "sidebar.settings", href: "/settings", icon: SlidersHorizontal, group: "system" },
 ];
+
+const groupOrder: NavGroup[] = ["overview", "management", "tools", "system"];
 
 interface SidebarProps {
   className?: string;
@@ -56,6 +61,7 @@ export function Sidebar({
   onToggleCollapse,
   showCollapseToggle = false,
 }: SidebarProps) {
+  const { t, i18n } = useTranslation();
   const location = useLocation();
   const navigate = useNavigate();
   const { logout } = useAuthStore();
@@ -82,6 +88,20 @@ export function Sidebar({
     }
   };
 
+  const langLabels: Record<SupportedLanguage, string> = {
+    "zh-CN": t("language.zhCN"),
+    "zh-TW": t("language.zhTW"),
+    "en": t("language.en"),
+  };
+
+  const cycleLang = () => {
+    const currentIndex = SUPPORTED_LANGUAGES.indexOf(i18n.language as SupportedLanguage);
+    const nextIndex = (currentIndex + 1) % SUPPORTED_LANGUAGES.length;
+    changeLanguage(SUPPORTED_LANGUAGES[nextIndex]);
+  };
+
+  const currentLangLabel = langLabels[i18n.language as SupportedLanguage] || langLabels["zh-CN"];
+
   const handleLogout = async () => {
     await logout();
     navigate("/", { replace: true });
@@ -90,11 +110,12 @@ export function Sidebar({
 
   const NavLink = ({ item }: { item: NavItem }) => {
     const isActive = location.pathname === item.href || location.pathname.startsWith(`${item.href}/`);
+    const title = t(item.titleKey);
     return (
       <Link
         to={item.href}
         onClick={() => onNavigate?.()}
-        title={collapsed ? item.title : undefined}
+        title={collapsed ? title : undefined}
         className={cn(
           "group relative flex items-center gap-3 px-3 py-2 rounded-md text-[13px] font-medium transition-all duration-150",
           collapsed && "justify-center px-0 w-10 h-10 mx-auto",
@@ -109,25 +130,23 @@ export function Sidebar({
             !isActive && "group-hover:scale-105 transition-transform duration-150",
           )}
         />
-        {!collapsed && <span>{item.title}</span>}
+        {!collapsed && <span>{title}</span>}
       </Link>
     );
   };
 
   const groupedNavItems = (() => {
     const groups: Record<NavGroup, NavItem[]> = {
-      总览: [],
-      管理: [],
-      工具: [],
-      系统: [],
+      overview: [],
+      management: [],
+      tools: [],
+      system: [],
     };
-    navItems.forEach((item) => {
+    navItemDefs.forEach((item) => {
       groups[item.group].push(item);
     });
     return groups;
   })();
-
-  const groupOrder: NavGroup[] = ["总览", "管理", "工具", "系统"];
 
   return (
     <aside
@@ -180,7 +199,7 @@ export function Sidebar({
         <div className={cn("flex gap-1 mb-2", collapsed ? "flex-col items-center" : "")}>
           <button
             type="button"
-            title={collapsed ? (theme === "dark" ? "浅色模式" : "深色模式") : undefined}
+            title={collapsed ? (theme === "dark" ? t('sidebar.lightMode') : t('sidebar.darkMode')) : undefined}
             className={cn(
               "flex items-center justify-center rounded-md transition-colors duration-150",
               collapsed
@@ -190,7 +209,22 @@ export function Sidebar({
             onClick={toggleTheme}
           >
             {theme === "dark" ? <Sun className="h-3.5 w-3.5" /> : <Moon className="h-3.5 w-3.5" />}
-            {!collapsed && <span>{theme === "dark" ? "浅色" : "深色"}</span>}
+            {!collapsed && <span>{theme === "dark" ? t('sidebar.lightMode') : t('sidebar.darkMode')}</span>}
+          </button>
+
+          <button
+            type="button"
+            title={collapsed ? currentLangLabel : undefined}
+            className={cn(
+              "flex items-center justify-center rounded-md transition-colors duration-150",
+              collapsed
+                ? "w-10 h-9 hover:bg-muted text-muted-foreground hover:text-foreground"
+                : "flex-1 h-8 gap-1.5 px-2.5 hover:bg-muted/70 text-muted-foreground hover:text-foreground text-[11px] font-medium",
+            )}
+            onClick={cycleLang}
+          >
+            <Languages className="h-3.5 w-3.5" />
+            {!collapsed && <span>{currentLangLabel}</span>}
           </button>
 
           <a
@@ -227,7 +261,7 @@ export function Sidebar({
                 ) : (
                   <>
                     <PanelLeftClose className="h-3.5 w-3.5" />
-                    <span>收起</span>
+                    <span>{t('sidebar.collapse')}</span>
                   </>
                 )}
               </button>
@@ -238,7 +272,7 @@ export function Sidebar({
         {/* Logout Button */}
         <button
           type="button"
-          title={collapsed ? "退出登录" : undefined}
+          title={collapsed ? t('sidebar.logout') : undefined}
           className={cn(
             "flex items-center justify-center gap-2 w-full rounded-md text-[13px] font-medium transition-all duration-150",
             collapsed ? "h-9" : "h-9 px-3",
@@ -247,7 +281,7 @@ export function Sidebar({
           onClick={handleLogout}
         >
           <LogOut className="h-3.5 w-3.5" />
-          {!collapsed && <span>退出登录</span>}
+          {!collapsed && <span>{t('sidebar.logout')}</span>}
         </button>
       </div>
     </aside>

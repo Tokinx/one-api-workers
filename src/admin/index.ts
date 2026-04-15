@@ -32,6 +32,7 @@ import {
     UsageLogSearchEndpoint,
 } from "./analytics_api"
 import { getSystemConfig, isTelegramSecurityEnabled } from "../system-config"
+import { t } from "../i18n"
 import {
     clearAdminSessionCookie,
     getAdminSessionTokenFromRequest,
@@ -81,8 +82,8 @@ app.use('/api/admin/*', async (c, next) => {
 
     return c.text(
         securityEnabled
-            ? "Telegram 登录验证已开启，请先完成验证码登录"
-            : "Unauthorized",
+            ? t(c.get('lang') || 'zh-CN', 'auth.telegramRequired')
+            : t(c.get('lang') || 'zh-CN', 'auth.unauthorized'),
         401
     );
 });

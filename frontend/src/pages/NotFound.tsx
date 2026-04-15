@@ -1,8 +1,11 @@
 import { Button } from '@/components/ui/button'
 import { Link } from 'react-router-dom'
 import { ArrowLeft, Zap } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 
 export function NotFound() {
+  const { t } = useTranslation()
+
   return (
     <div className="flex flex-col items-center justify-center min-h-[60vh] px-4 animate-in">
       <div className="relative mb-8">
@@ -13,12 +16,12 @@ export function NotFound() {
       </div>
       <h1 className="text-6xl font-bold text-muted-foreground/20 mb-2">404</h1>
       <p className="text-lg text-muted-foreground mb-8">
-        页面不存在
+        {t('notFound.title')}
       </p>
       <Button variant="outline" size="lg" asChild className="rounded-xl">
         <Link to="/">
           <ArrowLeft className="h-4 w-4 mr-2" />
-          返回首页
+          {t('notFound.backHome')}
         </Link>
       </Button>
     </div>

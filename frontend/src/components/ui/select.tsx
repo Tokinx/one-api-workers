@@ -85,7 +85,7 @@ const Select = React.forwardRef<HTMLButtonElement, SelectProps>(
       onBlur,
       onFocus,
       onKeyDown,
-      placeholder = '请选择',
+      placeholder = '',
       'aria-label': ariaLabel,
       'aria-describedby': ariaDescribedBy,
       'aria-labelledby': ariaLabelledBy,

@@ -18,50 +18,7 @@ import { readScopedCache, writeScopedCache } from "@/lib/local-cache";
 import { cn, formatCompactNumber, formatCurrency } from "@/lib/utils";
 import { Activity, CircleDollarSign, Clock3, DatabaseZap, RefreshCw, ShieldCheck } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-
-const RANGE_OPTIONS: Array<{ value: AnalyticsRange; label: string }> = [
-  { value: "24h", label: "24 小时" },
-  { value: "7d", label: "7 天" },
-  { value: "30d", label: "30 天" },
-  { value: "90d", label: "90 天" },
-];
-
-const BREAKDOWN_CHARTS: Array<{
-  dimension: AnalyticsBreakdownDimension;
-  title: string;
-  description: string;
-  barClassName: string;
-  badgeClassName: string;
-}> = [
-  {
-    dimension: "model",
-    title: "模型排行",
-    description: "看清哪些模型承载最多请求，并同步观察质量与成本。",
-    barClassName: "from-amber-500 to-orange-400",
-    badgeClassName: "bg-amber-500/12 text-amber-700 dark:text-amber-400",
-  },
-  {
-    dimension: "channel",
-    title: "渠道排行",
-    description: "对比不同渠道的请求承载能力与稳定性表现。",
-    barClassName: "from-emerald-500 to-teal-400",
-    badgeClassName: "bg-emerald-500/12 text-emerald-600 dark:text-emerald-400",
-  },
-  {
-    dimension: "token",
-    title: "令牌排行",
-    description: "按请求量识别最活跃的访问凭证。",
-    barClassName: "from-sky-500 to-cyan-400",
-    badgeClassName: "bg-sky-500/12 text-sky-600 dark:text-sky-400",
-  },
-  {
-    dimension: "provider",
-    title: "服务商排行",
-    description: "衡量各上游服务商承接的请求占比与稳定性表现。",
-    barClassName: "from-rose-500 to-pink-400",
-    badgeClassName: "bg-rose-500/12 text-rose-600 dark:text-rose-400",
-  },
-];
+import { useTranslation } from "react-i18next";
 
 const formatPercent = (value: number): string => `${(value * 100).toFixed(1)}%`;
 
@@ -81,16 +38,63 @@ const getAnalyticsTrendCacheKey = (range: AnalyticsRange): string => `analytics:
 const getAnalyticsBreakdownCacheKey = (range: AnalyticsRange, dimension: AnalyticsBreakdownDimension): string =>
   `analytics:breakdown:${range}:${dimension}`;
 
+const RANGE_VALUES: AnalyticsRange[] = ["24h", "7d", "30d", "90d"];
+
 const getInitialAnalyticsRange = (): AnalyticsRange => {
   const cachedRange = readScopedCache<AnalyticsRange>(ANALYTICS_RANGE_CACHE_KEY)?.data;
 
-  return (cachedRange && RANGE_OPTIONS.some((option) => option.value === cachedRange)) ? cachedRange : "24h";
+  return (cachedRange && RANGE_VALUES.includes(cachedRange)) ? cachedRange : "24h";
 };
 
 export function Analytics() {
+  const { t } = useTranslation();
   const [range, setRange] = useState<AnalyticsRange>(getInitialAnalyticsRange);
   const { data: billingConfig } = useBillingConfig();
   const displayDecimals = billingConfig?.displayDecimals ?? 6;
+
+  const RANGE_OPTIONS: Array<{ value: AnalyticsRange; label: string }> = [
+    { value: "24h", label: t('analytics.range24h') },
+    { value: "7d", label: t('analytics.range7d') },
+    { value: "30d", label: t('analytics.range30d') },
+    { value: "90d", label: t('analytics.range90d') },
+  ];
+
+  const BREAKDOWN_CHARTS: Array<{
+    dimension: AnalyticsBreakdownDimension;
+    title: string;
+    description: string;
+    barClassName: string;
+    badgeClassName: string;
+  }> = [
+    {
+      dimension: "model",
+      title: t('analytics.modelRanking'),
+      description: t('analytics.modelRankingDesc'),
+      barClassName: "from-amber-500 to-orange-400",
+      badgeClassName: "bg-amber-500/12 text-amber-700 dark:text-amber-400",
+    },
+    {
+      dimension: "channel",
+      title: t('analytics.channelRanking'),
+      description: t('analytics.channelRankingDesc'),
+      barClassName: "from-emerald-500 to-teal-400",
+      badgeClassName: "bg-emerald-500/12 text-emerald-600 dark:text-emerald-400",
+    },
+    {
+      dimension: "token",
+      title: t('analytics.tokenRanking'),
+      description: t('analytics.tokenRankingDesc'),
+      barClassName: "from-sky-500 to-cyan-400",
+      badgeClassName: "bg-sky-500/12 text-sky-600 dark:text-sky-400",
+    },
+    {
+      dimension: "provider",
+      title: t('analytics.providerRanking'),
+      description: t('analytics.providerRankingDesc'),
+      barClassName: "from-rose-500 to-pink-400",
+      badgeClassName: "bg-rose-500/12 text-rose-600 dark:text-rose-400",
+    },
+  ];
 
   const overviewCacheEntry = useMemo(
     () => readScopedCache<AnalyticsOverviewData>(getAnalyticsOverviewCacheKey(range)),
@@ -228,8 +232,8 @@ export function Analytics() {
 
   return (
     <PageContainer
-      title="总览看板"
-      description="聚合查看请求、成本、成功率与关键维度分布。"
+      title={t('analytics.title')}
+      description={t('analytics.description')}
       actions={
         <div className="flex items-center gap-2">
           <div className="w-28">
@@ -251,40 +255,40 @@ export function Analytics() {
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
           <Card className="border-0">
             <CardHeader className="pb-3">
-              <CardDescription>请求总量</CardDescription>
+              <CardDescription>{t('analytics.totalRequests')}</CardDescription>
               <CardTitle className="text-3xl">{formatCompactNumber(overview?.totals.requests || 0)}</CardTitle>
             </CardHeader>
             <CardContent className="flex items-center justify-between text-sm text-muted-foreground">
-              <span>成功 {formatCompactNumber(overview?.totals.successes || 0)}</span>
+              <span>{t('analytics.successCount', { count: formatCompactNumber(overview?.totals.successes || 0) })}</span>
               <Activity className="h-4 w-4 text-sky-500" />
             </CardContent>
           </Card>
 
           <Card className="border-0">
             <CardHeader className="pb-3">
-              <CardDescription>成功率</CardDescription>
+              <CardDescription>{t('analytics.successRate')}</CardDescription>
               <CardTitle className="text-3xl">{formatPercent(overview?.totals.successRate || 0)}</CardTitle>
             </CardHeader>
             <CardContent className="flex items-center justify-between text-sm text-muted-foreground">
-              <span>失败 {formatCompactNumber(overview?.totals.failures || 0)}</span>
+              <span>{t('analytics.failureCount', { count: formatCompactNumber(overview?.totals.failures || 0) })}</span>
               <ShieldCheck className="h-4 w-4 text-emerald-500" />
             </CardContent>
           </Card>
 
           <Card className="border-0">
             <CardHeader className="pb-3">
-              <CardDescription>输入 Tokens</CardDescription>
+              <CardDescription>{t('analytics.inputTokens')}</CardDescription>
               <CardTitle className="text-3xl">{formatCompactNumber(overview?.totals.promptTokens || 0)}</CardTitle>
             </CardHeader>
             <CardContent className="flex items-center justify-between text-sm text-muted-foreground">
-              <span>总计 {formatCompactNumber(overview?.totals.totalTokens || 0)}</span>
+              <span>{t('analytics.totalTokensCount', { count: formatCompactNumber(overview?.totals.totalTokens || 0) })}</span>
               <DatabaseZap className="h-4 w-4 text-violet-500" />
             </CardContent>
           </Card>
 
           <Card className="border-0">
             <CardHeader className="pb-3">
-              <CardDescription>输出 Tokens</CardDescription>
+              <CardDescription>{t('analytics.outputTokens')}</CardDescription>
               <CardTitle className="text-3xl">{formatCompactNumber(overview?.totals.completionTokens || 0)}</CardTitle>
             </CardHeader>
             <CardContent className="flex items-center justify-between text-sm text-muted-foreground">
@@ -295,7 +299,7 @@ export function Analytics() {
 
           <Card className="border-0">
             <CardHeader className="pb-3">
-              <CardDescription>平均延迟</CardDescription>
+              <CardDescription>{t('analytics.avgLatency')}</CardDescription>
               <CardTitle className="text-3xl">{formatDuration(overview?.totals.avgLatencyMs || 0)}</CardTitle>
             </CardHeader>
             <CardContent className="flex items-center justify-between text-sm text-muted-foreground">
@@ -307,8 +311,8 @@ export function Analytics() {
 
         {!trend || trend.points.length === 0 ? (
           <Card className="border-0 flex flex-col items-center justify-center py-16">
-            <p className="text-sm font-medium">暂无趋势数据</p>
-            <p className="mt-1 text-sm text-muted-foreground">写入第一批使用事件后，这里会展示完整柱状趋势。</p>
+            <p className="text-sm font-medium">{t('analytics.noTrendData')}</p>
+            <p className="mt-1 text-sm text-muted-foreground">{t('analytics.noTrendDataHint')}</p>
           </Card>
         ) : (
           <TrendBarChart points={trend.points} range={range} displayDecimals={displayDecimals} />

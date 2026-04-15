@@ -1,6 +1,7 @@
 import { AnalyticsRange, AnalyticsTrendPoint } from "@/types";
 import { formatCompactNumber, formatCurrency, parseUtcTimestamp } from "@/lib/utils";
 import { Card } from "../ui/card";
+import { getLocaleString } from "@/i18n";
 
 const formatAxisLabel = (value: string, range: AnalyticsRange): string => {
   const date = parseUtcTimestamp(value);
@@ -8,13 +9,15 @@ const formatAxisLabel = (value: string, range: AnalyticsRange): string => {
     return value;
   }
 
+  const locale = getLocaleString();
+
   if (range === "24h") {
-    return date.toLocaleTimeString("zh-CN", {
+    return date.toLocaleTimeString(locale, {
       hour: "2-digit",
     });
   }
 
-  return date.toLocaleDateString("zh-CN", {
+  return date.toLocaleDateString(locale, {
     month: "2-digit",
     day: "2-digit",
   });
@@ -74,7 +77,7 @@ export function TrendBarChart({
                     <div
                       className="group relative flex h-56 items-end bg-muted/50 outline-none hover:bg-muted"
                       tabIndex={0}
-                      aria-label={`${label}，请求数 ${formatCompactNumber(point.requests)}，花费 ${formatCurrency(point.totalCost, displayDecimals)}`}
+                      aria-label={`${label}, ${formatCompactNumber(point.requests)} requests, ${formatCurrency(point.totalCost, displayDecimals)}`}
                     >
                       <div className="pointer-events-none absolute top-3 left-[-100%] right-[-100%] mx-auto z-20 w-24 rounded-md border border-border/50 bg-card px-3 py-2 text-left opacity-0 shadow-lg transition-all duration-200 translate-y-2 group-hover:translate-y-0 group-hover:opacity-100 group-focus-visible:translate-y-0 group-focus-visible:opacity-100">
                         <div className="text-[10px] text-muted-foreground">Requests</div>

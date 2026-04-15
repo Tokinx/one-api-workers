@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Bot, Check, FileText, Globe, Shield, SlidersHorizontal } from "lucide-react";
+import { Bot, Check, FileText, Shield, SlidersHorizontal } from "lucide-react";
 
 import { apiClient } from "@/api/client";
 import { Button } from "@/components/ui/button";
@@ -20,6 +20,7 @@ import {
   normalizeSystemConfig,
 } from "@/lib/system-config";
 import type { SystemConfig } from "@/types";
+import { useTranslation } from "react-i18next";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "";
 const AUTO_SAVE_DELAY_MS = 800;
@@ -52,6 +53,7 @@ const formatSaveTime = (value: Date | null): string => {
 };
 
 export function SystemSettings() {
+  const { t } = useTranslation();
   const [systemConfig, setSystemConfig] = useState(DEFAULT_SYSTEM_CONFIG);
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
@@ -115,13 +117,13 @@ export function SystemSettings() {
       setLastSavedAt(new Date());
 
       if (variables.source === "manual") {
-        addToast("系统设置已保存", "success");
+        addToast(t('settings.configSaved'), "success");
       }
     },
     onError: (error: Error, variables) => {
       setSaveState("error");
       if (variables.source === "manual") {
-        addToast(`保存失败：${error.message}`, "error");
+        addToast(t('common.saveFailed', { message: error.message }), "error");
       }
     },
   });
@@ -142,10 +144,10 @@ export function SystemSettings() {
           verifiedAt: verification?.verifiedAt || null,
         },
       }));
-      addToast("测试消息已发送，请到 Telegram 查收", "success");
+      addToast(t('settings.testMessageSent'), "success");
     },
     onError: (error: Error) => {
-      addToast(`测试失败：${error.message}`, "error");
+      addToast(t('settings.testFailed', { message: error.message }), "error");
     },
   });
 
@@ -201,11 +203,11 @@ export function SystemSettings() {
   const saveHint = (() => {
     switch (saveState) {
       case "saving":
-        return "自动保存中...";
+        return t('common.autoSaving');
       case "error":
-        return "自动保存失败";
+        return t('common.autoSaveFailed');
       default:
-        return `保存于 ${formatSaveTime(lastSavedAt)}`;
+        return t('common.savedAt', { time: formatSaveTime(lastSavedAt) });
     }
   })();
 
@@ -241,8 +243,8 @@ export function SystemSettings() {
 
   return (
     <PageContainer
-      title="系统设置"
-      description="统一管理全局系统设置"
+      title={t('settings.title')}
+      description={t('settings.description')}
       actions={
         <div className="flex items-center gap-3">
           <span className="text-xs text-muted-foreground">{saveHint}</span>
@@ -252,7 +254,7 @@ export function SystemSettings() {
             disabled={saveSystemConfigMutation.isPending || systemConfigQuery.isLoading}
           >
             <Check className="mr-1 h-4 w-4" />
-            保存
+            {t('common.save')}
           </Button>
         </div>
       }
@@ -266,15 +268,15 @@ export function SystemSettings() {
             <div className="min-w-0 flex-1">
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <h3 className="font-bold tracking-tight">Telegram 安全设置</h3>
+                  <h3 className="font-bold tracking-tight">{t('settings.telegramSecurity')}</h3>
                   {!normalizedSystemConfig.adminSecurity.enabled && telegramConfigComplete ? (
                     <p className="text-sm text-amber-600 dark:text-amber-300">
-                      发送测试消息，验证通过后即可开启 Telegram 安全设置。
+                      {t('settings.telegramNeedTest')}
                     </p>
                   ) : telegramSecurityVerified ? (
-                    <p className="text-sm text-green-600 dark:text-green-300">已开启 Telegram 登录验证与登录通知。</p>
+                    <p className="text-sm text-green-600 dark:text-green-300">{t('settings.telegramVerified')}</p>
                   ) : (
-                    <p className="text-sm text-muted-foreground">绑定 Telegram，开启登录验证与登录通知。</p>
+                    <p className="text-sm text-muted-foreground">{t('settings.telegramNotVerified')}</p>
                   )}
                 </div>
                 <Switch
@@ -327,14 +329,14 @@ export function SystemSettings() {
               <div className="space-y-1">
                 <div className="flex items-center gap-2 text-sm font-medium">
                   <Bot className="h-4 w-4" />
-                  发送测试消息
+                  {t('settings.sendTestMessage')}
                 </div>
                 <p className="text-xs text-muted-foreground/60">
                   {!telegramConfigComplete
-                    ? "请先填写完整的 Bot Token 和 Chat ID。"
+                    ? t('settings.fillBotTokenFirst')
                     : telegramSecurityVerified
-                      ? `最近一次验证通过时间：${normalizedSystemConfig.adminSecurity.verifiedAt || "--"}`
-                      : "测试通过后，安全开关才会解锁。"}
+                      ? t('settings.lastVerified', { time: normalizedSystemConfig.adminSecurity.verifiedAt || "--" })
+                      : t('settings.testUnlockHint')}
                 </p>
               </div>
 
@@ -344,7 +346,7 @@ export function SystemSettings() {
                 onClick={() => telegramTestMutation.mutate()}
                 disabled={telegramTestMutation.isPending || !telegramConfigComplete}
               >
-                {telegramTestMutation.isPending ? "发送中..." : "发送测试消息"}
+                {telegramTestMutation.isPending ? t('settings.sendTestMessageSending') : t('settings.sendTestMessage')}
               </Button>
             </div>
           </div>
@@ -358,16 +360,18 @@ export function SystemSettings() {
               <SlidersHorizontal className="h-4 w-4" />
             </div>
             <div className="min-w-0 flex-1">
-              <h3 className="font-bold tracking-tight">显示精度设置</h3>
+              <h3 className="font-bold tracking-tight">{t('settings.displayPrecision')}</h3>
               <p className="text-sm text-muted-foreground">
-                页面显示金额保留 {normalizedSystemConfig.displayDecimals} 位小数，示例：$
-                {(0.123456789).toFixed(normalizedSystemConfig.displayDecimals)}
+                {t('settings.displayPrecisionDesc', {
+                  decimals: normalizedSystemConfig.displayDecimals,
+                  example: (0.123456789).toFixed(normalizedSystemConfig.displayDecimals),
+                })}
               </p>
             </div>
           </div>
           <div className="flex-1" />
           <ButtonGroup
-            aria-label="显示金额精度"
+            aria-label={t('settings.displayPrecision')}
             value={normalizedSystemConfig.displayDecimals}
             options={PRECISION_OPTIONS}
             onValueChange={(value) =>
@@ -389,9 +393,9 @@ export function SystemSettings() {
             <div className="min-w-0 flex-1">
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <h3 className="font-bold tracking-tight">开启接口文档</h3>
+                  <h3 className="font-bold tracking-tight">{t('settings.apiDocs')}</h3>
                   <p className="text-sm text-muted-foreground">
-                    开启后自动暴露 Swagger、ReDoc 与 OpenAPI JSON；关闭后对应路由会直接返回 404。
+                    {t('settings.apiDocsDesc')}
                   </p>
                 </div>
                 <Switch
@@ -423,7 +427,7 @@ export function SystemSettings() {
                   </div>
                   <Button asChild variant="outline" className="h-8 px-3">
                     <a href={item.href} target="_blank" rel="noreferrer">
-                      打开
+                      {t('common.open')}
                     </a>
                   </Button>
                 </div>

@@ -2,6 +2,7 @@ import { Context } from "hono";
 
 import { BILLING_RAW_SCALE, LEGACY_TO_RAW_FACTOR } from "../billing";
 import { DEFAULT_USAGE_ANALYTICS_DATASET_NAME } from "./usage-logger";
+import { t } from "../i18n";
 
 export type AnalyticsRange = "24h" | "7d" | "30d" | "90d";
 export type AnalyticsBreakdownDimension = "token" | "channel" | "model" | "provider";
@@ -285,14 +286,16 @@ const formatSqlDateTime = (date: Date): string => {
     return date.toISOString().slice(0, 19).replace("T", " ");
 };
 
-const parseDateTimeInput = (value: string | undefined, fieldLabel: string): string | undefined => {
+const parseDateTimeInput = (value: string | undefined, fieldKey: string, lang: string): string | undefined => {
     if (!value) {
         return undefined;
     }
 
     const date = new Date(value);
     if (Number.isNaN(date.getTime())) {
-        throw new AnalyticsQueryValidationError(`${fieldLabel} 格式无效`);
+        throw new AnalyticsQueryValidationError(
+            t(lang, "analytics.invalidFormat", { field: t(lang, fieldKey) })
+        );
     }
 
     return formatSqlDateTime(date);
@@ -373,13 +376,14 @@ const buildTrendWindow = (range: AnalyticsRange, config: RangeConfig) => {
 
 const buildCustomTimeWindow = (
     requestedStart?: string,
-    requestedEnd?: string
+    requestedEnd?: string,
+    lang: string = "zh-CN"
 ): TimeWindow => {
-    const startTime = parseDateTimeInput(requestedStart, "开始时间");
-    const endTime = parseDateTimeInput(requestedEnd, "结束时间");
+    const startTime = parseDateTimeInput(requestedStart, "analytics.startTime", lang);
+    const endTime = parseDateTimeInput(requestedEnd, "analytics.endTime", lang);
 
     if (startTime && endTime && startTime >= endTime) {
-        throw new AnalyticsQueryValidationError("开始时间必须早于结束时间");
+        throw new AnalyticsQueryValidationError(t(lang, "analytics.startBeforeEnd"));
     }
 
     const clauses: string[] = [];
@@ -563,13 +567,13 @@ const hasExtendedLogSchema = (support: DatasetColumnSupport): boolean => {
     return EXTENDED_LOG_COLUMNS.every((columnName) => isColumnAvailable(support, columnName));
 };
 
-const getUsageLogCompatibilityWarning = (support: DatasetColumnSupport): string | undefined => {
+const getUsageLogCompatibilityWarning = (support: DatasetColumnSupport, lang: string): string | undefined => {
     if (!hasAnyLegacyLogSchema(support)) {
-        return "当前 Analytics Engine dataset 不包含使用日志基础字段，通常说明它是旧的、空的，或并非当前版本写入的 usage log dataset。";
+        return t(lang, "analytics.schemaV1Warning");
     }
 
     if (!hasExtendedLogSchema(support)) {
-        return "当前 Analytics Engine dataset 仍是旧日志 schema，request id / trace id / IP / UA / 地理位置 / 错误摘要 等新字段需要新版数据列可用后才可查询。";
+        return t(lang, "analytics.schemaV2Warning");
     }
 
     return undefined;
@@ -770,6 +774,7 @@ export const queryUsageEvents = async (
 ) => {
     const { range, config } = getRangeConfig(requestedRange);
     const dataset = getDatasetName(c);
+    const lang = c.get('lang') || 'zh-CN';
     const limit = Math.min(Math.max(Number(requestedLimit || 40) || 40, 1), 100);
     const countRows = await runAnalyticsQuery<Record<string, unknown>>(c, `
 SELECT
@@ -789,7 +794,7 @@ WHERE ${buildRangeWhereClause(config)}
     }
 
     const columnSupport = await getDatasetColumnSupport(c, dataset, buildRangeWhereClause(config));
-    const compatibilityWarning = getUsageLogCompatibilityWarning(columnSupport);
+    const compatibilityWarning = getUsageLogCompatibilityWarning(columnSupport, lang);
     const normalizedTotalCostExpression = buildNormalizedCostExpression(columnSupport, DOUBLE_FIELDS.totalCost);
     const normalizedCacheCostExpression = buildNormalizedCostExpression(columnSupport, DOUBLE_FIELDS.cacheCost);
     const rows = await runAnalyticsQuery<Record<string, unknown>>(c, `
@@ -874,7 +879,8 @@ export const queryUsageLogRecords = async (
     params: UsageLogQueryParams
 ) => {
     const dataset = getDatasetName(c);
-    const timeWindow = buildCustomTimeWindow(params.start, params.end);
+    const lang = c.get('lang') || 'zh-CN';
+    const timeWindow = buildCustomTimeWindow(params.start, params.end, lang);
     const requestedPage = Math.min(Math.max(Number(params.page || 1) || 1, 1), 1000);
     const dimension = (params.dimension && params.dimension in LOG_FILTER_FIELDS
         ? params.dimension
@@ -900,7 +906,7 @@ WHERE ${timeWindow.whereClause}
     }
 
     const columnSupport = await getDatasetColumnSupport(c, dataset, timeWindow.whereClause);
-    const compatibilityWarning = getUsageLogCompatibilityWarning(columnSupport);
+    const compatibilityWarning = getUsageLogCompatibilityWarning(columnSupport, lang);
 
     if (!hasAnyLegacyLogSchema(columnSupport)) {
         return buildUsageLogEmptyResponse(

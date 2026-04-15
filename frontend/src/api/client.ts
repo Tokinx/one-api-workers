@@ -15,6 +15,7 @@ import {
   UsageLogSearchData,
 } from '@/types'
 import { clearAdminCredentials } from '@/lib/admin-auth'
+import i18n, { getCurrentLanguage } from '@/i18n'
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || ''
 
@@ -56,6 +57,9 @@ async function requestInterceptor(config: RequestInit): Promise<RequestInit> {
     headers.set('Content-Type', 'application/json')
   }
 
+  // 附加语言偏好
+  headers.set('x-lang', getCurrentLanguage())
+
   return { ...config, headers }
 }
 
@@ -79,7 +83,7 @@ async function responseInterceptor(response: Response, behavior: RequestBehavior
       }
     } catch {
       // 不是 JSON，直接使用文本
-      errorMessage = responseText || `请求失败: ${response.status}`
+      errorMessage = responseText || `Request failed: ${response.status}`
     }
 
     const error = new ApiError(errorMessage, response.status)
@@ -90,22 +94,22 @@ async function responseInterceptor(response: Response, behavior: RequestBehavior
         if (!behavior.skipUnauthorizedHandler) {
           clearAdminCredentials()
           onUnauthorized?.()
-          error.message = '认证已过期，请重新登录'
+          error.message = i18n.t('apiClient.authExpired')
         }
         break
       case 403:
-        error.message = '没有权限执行此操作'
+        error.message = i18n.t('apiClient.forbidden')
         break
       case 404:
-        error.message = '请求的资源不存在'
+        error.message = i18n.t('apiClient.notFound')
         break
       case 500:
-        error.message = '服务器内部错误'
+        error.message = i18n.t('apiClient.serverError')
         break
       case 502:
       case 503:
       case 504:
-        error.message = '服务暂时不可用，请稍后重试'
+        error.message = i18n.t('apiClient.serviceUnavailable')
         break
     }
 
@@ -169,7 +173,7 @@ async function request<T>(
   } catch (error) {
     // 处理网络错误
     if (error instanceof TypeError && error.message.includes('fetch')) {
-      const networkError = new ApiError('网络连接失败，请检查网络', 0)
+      const networkError = new ApiError(i18n.t('apiClient.networkError'), 0)
       onError?.(networkError)
       throw networkError
     }

@@ -2,52 +2,53 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Globe, Gauge, BarChart3, Shield, Zap, ArrowRight, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuthStore } from "@/store/auth";
-import { Link } from "react-router-dom";
-
-const features = [
-  {
-    icon: Globe,
-    title: "多渠道支持",
-    description: "支持 OpenAI、Claude、Gemini、Azure OpenAI 等多种 AI 服务商。",
-    gradient: "from-blue-500/10 to-cyan-500/10",
-    iconBg: "from-blue-500 to-cyan-500",
-    delay: "0ms",
-  },
-  {
-    icon: Gauge,
-    title: "负载均衡",
-    description: "支持按权重多渠道路由、单渠道多密钥重试/轮换，以及跨渠道 fallback。",
-    gradient: "from-emerald-500/10 to-teal-500/10",
-    iconBg: "from-emerald-500 to-teal-500",
-    delay: "50ms",
-  },
-  {
-    icon: BarChart3,
-    title: "用量追踪",
-    description: "Analytics Engine 实时统计，支持日志回溯便于成本分析。",
-    gradient: "from-amber-500/10 to-orange-500/10",
-    iconBg: "from-amber-500 to-orange-500",
-    delay: "100ms",
-  },
-  {
-    icon: Shield,
-    title: "安全管理",
-    description: "基于安全令牌的访问控制与独立 API 密钥分配。",
-    gradient: "from-violet-500/10 to-purple-500/10",
-    iconBg: "from-violet-500 to-purple-500",
-    delay: "150ms",
-  },
-];
-
-const steps = [
-  { num: "01", title: "管理员登录", desc: "使用管理员令牌登录系统", color: "text-blue-500" },
-  { num: "02", title: "配置渠道", desc: "添加 API 服务商", color: "text-emerald-500" },
-  { num: "03", title: "创建令牌", desc: "为应用创建 API 令牌", color: "text-amber-500" },
-  { num: "04", title: "开始使用", desc: "使用令牌调用 API", color: "text-violet-500" },
-];
+import { useTranslation } from "react-i18next";
 
 export function Dashboard() {
+  const { t } = useTranslation();
   const { openAuthModal } = useAuthStore();
+
+  const features = [
+    {
+      icon: Globe,
+      title: t('dashboard.featureMultiChannel'),
+      description: t('dashboard.featureMultiChannelDesc'),
+      gradient: "from-blue-500/10 to-cyan-500/10",
+      iconBg: "from-blue-500 to-cyan-500",
+      delay: "0ms",
+    },
+    {
+      icon: Gauge,
+      title: t('dashboard.featureLoadBalance'),
+      description: t('dashboard.featureLoadBalanceDesc'),
+      gradient: "from-emerald-500/10 to-teal-500/10",
+      iconBg: "from-emerald-500 to-teal-500",
+      delay: "50ms",
+    },
+    {
+      icon: BarChart3,
+      title: t('dashboard.featureUsageTracking'),
+      description: t('dashboard.featureUsageTrackingDesc'),
+      gradient: "from-amber-500/10 to-orange-500/10",
+      iconBg: "from-amber-500 to-orange-500",
+      delay: "100ms",
+    },
+    {
+      icon: Shield,
+      title: t('dashboard.featureSecurity'),
+      description: t('dashboard.featureSecurityDesc'),
+      gradient: "from-violet-500/10 to-purple-500/10",
+      iconBg: "from-violet-500 to-purple-500",
+      delay: "150ms",
+    },
+  ];
+
+  const steps = [
+    { num: "01", title: t('dashboard.step1Title'), desc: t('dashboard.step1Desc'), color: "text-blue-500" },
+    { num: "02", title: t('dashboard.step2Title'), desc: t('dashboard.step2Desc'), color: "text-emerald-500" },
+    { num: "03", title: t('dashboard.step3Title'), desc: t('dashboard.step3Desc'), color: "text-amber-500" },
+    { num: "04", title: t('dashboard.step4Title'), desc: t('dashboard.step4Desc'), color: "text-violet-500" },
+  ];
 
   return (
     <div className="animate-in">
@@ -57,15 +58,15 @@ export function Dashboard() {
           <div className="max-w-3xl">
             <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-primary/8 border border-primary/10 text-primary text-sm font-medium mb-6">
               <Sparkles className="h-3.5 w-3.5" />
-              <span>Unified AI Gateway</span>
+              <span>{t('dashboard.tagline')}</span>
             </div>
             <h1 className="text-4xl md:text-5xl lg:text-[3.5rem] font-bold tracking-tight leading-[1.1] mb-5">
               <span className="bg-gradient-to-r from-foreground via-foreground to-foreground/70 bg-clip-text text-transparent">
-                One API on Workers
+                {t('dashboard.heroTitle')}
               </span>
             </h1>
-            <p className="text-lg md:text-xl text-muted-foreground leading-relaxed mb-8 max-w-2xl">
-              基于 Cloudflare Workers<br/>分布式、低延迟、高性能的 AI 统一网关
+            <p className="text-lg md:text-xl text-muted-foreground leading-relaxed mb-8 max-w-2xl whitespace-pre-line">
+              {t('dashboard.heroDescription')}
             </p>
             <div className="flex flex-wrap gap-3">
               <Button
@@ -73,12 +74,9 @@ export function Dashboard() {
                 onClick={openAuthModal}
                 className="h-12 px-6 text-[15px] shadow-lg shadow-primary/20"
               >
-                管理员登录
+                {t('auth.adminLogin')}
                 <ArrowRight className="h-4 w-4 ml-1" />
               </Button>
-              {/* <Button variant="outline" size="lg" asChild className="h-12 px-6 text-[15px] rounded-xl">
-                <Link to="/api-test">体验 API</Link>
-              </Button> */}
             </div>
           </div>
         </div>
@@ -120,8 +118,8 @@ export function Dashboard() {
         <Card className="border-0">
           <CardContent className="py-6">
             <div className="pb-4">
-              <h2 className="text-lg font-semibold mb-1">快速开始</h2>
-              <p className="text-sm text-muted-foreground">四步完成配置，开始使用统一接口</p>
+              <h2 className="text-lg font-semibold mb-1">{t('dashboard.quickStart')}</h2>
+              <p className="text-sm text-muted-foreground">{t('dashboard.quickStartDesc')}</p>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
               {steps.map((step) => (
@@ -147,7 +145,7 @@ export function Dashboard() {
 
         {/* Supported Providers */}
         <div className="text-center py-4">
-          <p className="text-xs text-muted-foreground/60 uppercase tracking-wider mb-4">支持的服务端点</p>
+          <p className="text-xs text-muted-foreground/60 uppercase tracking-wider mb-4">{t('dashboard.supportedEndpoints')}</p>
           <div className="flex items-center justify-center gap-6 flex-wrap text-muted-foreground/40">
             {["OpenAI", "OpenAI Responses", "Claude", "Gemini", "Azure OpenAI"].map((name) => (
               <div

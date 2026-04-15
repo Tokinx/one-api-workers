@@ -17,12 +17,15 @@ import { useToast } from '@/components/ui/use-toast'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Menu, RotateCcw, Zap } from 'lucide-react'
 import { parseUtcTimestamp } from '@/lib/utils'
+import { useTranslation } from 'react-i18next'
+import { getLocaleString } from '@/i18n'
 
 interface AppLayoutProps {
   children: ReactNode
 }
 
 export function AppLayout({ children }: AppLayoutProps) {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const [adminToken, setAdminToken] = useState('')
   const [verificationCode, setVerificationCode] = useState('')
@@ -61,7 +64,7 @@ export function AppLayout({ children }: AppLayoutProps) {
   const finalizeLogin = () => {
     resetAuthDialog()
     setIsMobileNavOpen(false)
-    addToast('登录成功', 'success')
+    addToast(t('auth.loginSuccess'), 'success')
     navigate('/dashboard', { replace: true })
   }
 
@@ -79,7 +82,7 @@ export function AppLayout({ children }: AppLayoutProps) {
           setChallengeId(loginResult.challengeId)
           setChallengeExpiresAt(loginResult.challengeExpiresAt)
           setVerificationCode('')
-          addToast('验证码已发送到 Telegram', 'success')
+          addToast(t('auth.verificationSent'), 'success')
           return
         }
 
@@ -88,13 +91,13 @@ export function AppLayout({ children }: AppLayoutProps) {
       }
 
       if (!challengeId) {
-        throw new Error('验证码会话不存在，请重新获取')
+        throw new Error(t('auth.sessionMissing'))
       }
 
       await verifyLogin(challengeId, verificationCode)
       finalizeLogin()
     } catch (error) {
-      setAuthError(error instanceof Error ? error.message : '管理员令牌无效')
+      setAuthError(error instanceof Error ? error.message : t('auth.loginFailed'))
     } finally {
       setIsSubmitting(false)
     }
@@ -102,7 +105,7 @@ export function AppLayout({ children }: AppLayoutProps) {
 
   const handleResendVerificationCode = async () => {
     if (!adminToken.trim()) {
-      setAuthError('请先重新输入管理员令牌')
+      setAuthError(t('auth.reenterToken'))
       setAuthStep('token')
       return
     }
@@ -121,9 +124,9 @@ export function AppLayout({ children }: AppLayoutProps) {
       setChallengeId(loginResult.challengeId)
       setChallengeExpiresAt(loginResult.challengeExpiresAt)
       setVerificationCode('')
-      addToast('验证码已重新发送到 Telegram', 'success')
+      addToast(t('auth.verificationResent'), 'success')
     } catch (error) {
-      setAuthError(error instanceof Error ? error.message : '验证码发送失败')
+      setAuthError(error instanceof Error ? error.message : t('auth.loginFailed'))
     } finally {
       setIsSubmitting(false)
     }
@@ -132,7 +135,7 @@ export function AppLayout({ children }: AppLayoutProps) {
   const challengeExpiresText = (() => {
     const date = challengeExpiresAt ? parseUtcTimestamp(challengeExpiresAt) : null
     return date
-      ? date.toLocaleString('zh-CN', { hour12: false })
+      ? date.toLocaleString(getLocaleString(), { hour12: false })
       : ''
   })()
 
@@ -156,7 +159,7 @@ export function AppLayout({ children }: AppLayoutProps) {
               size="icon"
               className="h-9 w-9"
               onClick={() => setIsMobileNavOpen(true)}
-              aria-label="打开侧边栏"
+              aria-label={t('sidebar.openSidebar')}
             >
               <Menu className="h-4 w-4" />
             </Button>
@@ -198,11 +201,11 @@ export function AppLayout({ children }: AppLayoutProps) {
       <Dialog open={showAuthModal} onOpenChange={(open) => !open && handleCloseAuthModal()}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>管理员身份验证</DialogTitle>
+            <DialogTitle>{t('auth.title')}</DialogTitle>
             <DialogDescription>
               {authStep === 'token'
-                ? '请输入管理员令牌以访问管理功能'
-                : '验证码已发送到 Telegram，请输入 6 位数字验证码完成登录'}
+                ? t('auth.descToken')
+                : t('auth.descVerification')}
             </DialogDescription>
           </DialogHeader>
 
@@ -210,11 +213,11 @@ export function AppLayout({ children }: AppLayoutProps) {
             <div className="space-y-4">
               {authStep === 'token' ? (
                 <div className="space-y-2">
-                  <Label className="block" htmlFor="adminToken">管理员令牌</Label>
+                  <Label className="block" htmlFor="adminToken">{t('auth.tokenLabel')}</Label>
                   <Input
                     id="adminToken"
                     type="password"
-                    placeholder="请输入管理员令牌"
+                    placeholder={t('auth.tokenPlaceholder')}
                     value={adminToken}
                     onChange={(e) => setAdminToken(e.target.value)}
                     required
@@ -222,19 +225,19 @@ export function AppLayout({ children }: AppLayoutProps) {
                 </div>
               ) : (
                 <div className="space-y-2">
-                  <Label className="block" htmlFor="verificationCode">Telegram 验证码</Label>
+                  <Label className="block" htmlFor="verificationCode">{t('auth.verificationLabel')}</Label>
                   <Input
                     id="verificationCode"
                     type="text"
                     inputMode="numeric"
                     maxLength={6}
-                    placeholder="请输入 6 位验证码"
+                    placeholder={t('auth.verificationPlaceholder')}
                     value={verificationCode}
                     onChange={(e) => setVerificationCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
                     required
                   />
                   <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
-                    <span>{challengeExpiresText ? `验证码有效期至 ${challengeExpiresText}` : '验证码 5 分钟内有效'}</span>
+                    <span>{challengeExpiresText ? t('auth.verificationExpiry', { time: challengeExpiresText }) : t('auth.verificationDefault')}</span>
                     <button
                       type="button"
                       className="inline-flex items-center gap-1 text-foreground hover:text-muted-foreground"
@@ -242,7 +245,7 @@ export function AppLayout({ children }: AppLayoutProps) {
                       disabled={isSubmitting}
                     >
                       <RotateCcw className="h-3.5 w-3.5" />
-                      重新发送
+                      {t('auth.resend')}
                     </button>
                   </div>
                 </div>
@@ -270,16 +273,16 @@ export function AppLayout({ children }: AppLayoutProps) {
                   : handleCloseAuthModal}
                 className='mr-0'
               >
-                {authStep === 'verification' ? '返回上一步' : '取消'}
+                {authStep === 'verification' ? t('auth.backToPrevious') : t('common.cancel')}
               </Button>
               <Button type="submit" disabled={isSubmitting}>
                 {isSubmitting
                   ? authStep === 'verification'
-                    ? '验证中...'
-                    : '发送中...'
+                    ? t('auth.verifying')
+                    : t('auth.sending')
                   : authStep === 'verification'
-                    ? '验证并登录'
-                    : '登录'}
+                    ? t('auth.verifyAndLogin')
+                    : t('auth.login')}
               </Button>
             </DialogFooter>
           </form>

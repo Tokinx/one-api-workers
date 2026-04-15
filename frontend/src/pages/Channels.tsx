@@ -31,6 +31,8 @@ import {
   Cpu,
 } from "lucide-react";
 import { PageContainer } from "@/components/ui/page-container";
+import { useTranslation } from "react-i18next";
+import i18n from "@/i18n";
 
 type EditMode = "form" | "json";
 type ModelEditorMode = "visual" | "json";
@@ -53,11 +55,6 @@ const channelWeightOptions = Array.from({ length: 6 }, (_, weight) => ({
   value: weight,
   label: String(weight),
 }));
-
-const modelEditorModeOptions = [
-  { value: "visual", label: "可视化" },
-  { value: "json", label: "JSON" },
-] as const;
 
 const createEmptyModelRow = (): ModelRow => ({
   id: "",
@@ -230,13 +227,13 @@ const serializeModels = (models: ChannelModelMapping[]): string => {
 
 const validateModels = (models: ChannelModelMapping[]): string | null => {
   if (models.length === 0) {
-    return "请至少配置一个模型";
+    return i18n.t('channels.validation.atLeastOneModel');
   }
 
   const names = new Set<string>();
   for (const model of models) {
     if (names.has(model.name)) {
-      return `模型名称重复：${model.name}`;
+      return i18n.t('channels.validation.duplicateModelName', { name: model.name });
     }
     names.add(model.name);
   }
@@ -249,7 +246,7 @@ const parseModelsFromRows = (rows: ModelRow[]): { models: ChannelModelMapping[];
 
   for (const row of activeRows) {
     if (!row.id.trim()) {
-      return { models: [], error: "模型 ID 不能为空" };
+      return { models: [], error: i18n.t('channels.validation.modelIdEmpty') };
     }
   }
 
@@ -273,18 +270,18 @@ const parseModelsFromJson = (value: string): { models: ChannelModelMapping[]; er
   try {
     parsed = JSON.parse(value);
   } catch {
-    return { models: [], error: "模型 JSON 格式错误" };
+    return { models: [], error: i18n.t('channels.validation.modelJsonInvalid') };
   }
 
   if (!Array.isArray(parsed)) {
-    return { models: [], error: "模型 JSON 必须是数组" };
+    return { models: [], error: i18n.t('channels.validation.modelJsonMustBeArray') };
   }
 
   const models: ChannelModelMapping[] = [];
 
   for (const item of parsed) {
     if (!item || typeof item !== "object") {
-      return { models: [], error: "模型 JSON 项必须是对象" };
+      return { models: [], error: i18n.t('channels.validation.modelJsonItemMustBeObject') };
     }
 
     const id = typeof (item as ChannelModelMapping).id === "string" ? (item as ChannelModelMapping).id.trim() : "";
@@ -292,7 +289,7 @@ const parseModelsFromJson = (value: string): { models: ChannelModelMapping[]; er
       typeof (item as ChannelModelMapping).name === "string" ? (item as ChannelModelMapping).name.trim() : "";
 
     if (!id) {
-      return { models: [], error: "模型 JSON 中的 id 不能为空" };
+      return { models: [], error: i18n.t('channels.validation.modelJsonIdEmpty') };
     }
 
     models.push({
@@ -490,6 +487,7 @@ const getChannelEndpointPreview = (type: string | undefined, endpoint: string): 
 };
 
 export function Channels({ createMode = false, editRoute = false }: { createMode?: boolean; editRoute?: boolean }) {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const { key: routeKey } = useParams<{ key: string }>();
   const isRouteEdit = editRoute && Boolean(routeKey);
@@ -512,6 +510,11 @@ export function Channels({ createMode = false, editRoute = false }: { createMode
 
   const { addToast } = useToast();
   const queryClient = useQueryClient();
+
+  const modelEditorModeOptions = [
+    { value: "visual" as const, label: t('common.visual') },
+    { value: "json" as const, label: t('common.json') },
+  ];
 
   const applyModels = (models: ChannelModelMapping[]) => {
     const normalizedModels = normalizeModels(models);
@@ -568,11 +571,11 @@ export function Channels({ createMode = false, editRoute = false }: { createMode
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["channels"] });
-      addToast(editingKey ? "渠道更新成功" : "渠道添加成功", "success");
+      addToast(editingKey ? t('channels.updateSuccess') : t('channels.addSuccess'), "success");
       closeForm();
     },
     onError: (error: Error) => {
-      addToast("保存失败：" + error.message, "error");
+      addToast(t('common.saveFailed', { message: error.message }), "error");
     },
   });
 
@@ -582,10 +585,10 @@ export function Channels({ createMode = false, editRoute = false }: { createMode
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["channels"] });
-      addToast("渠道已删除", "success");
+      addToast(t('channels.deleteSuccess'), "success");
     },
     onError: (error: Error) => {
-      addToast("删除失败：" + error.message, "error");
+      addToast(t('common.deleteFailed', { message: error.message }), "error");
     },
   });
 
@@ -619,13 +622,13 @@ export function Channels({ createMode = false, editRoute = false }: { createMode
       return { previousChannels };
     },
     onSuccess: (_, { enabled }) => {
-      addToast(enabled ? "渠道已启用" : "渠道已停用", "success");
+      addToast(enabled ? t('channels.enabledToast') : t('channels.disabledToast'), "success");
     },
     onError: (error: Error, _variables, context) => {
       if (context?.previousChannels) {
         queryClient.setQueryData(["channels"], context.previousChannels);
       }
-      addToast("更新渠道状态失败：" + error.message, "error");
+      addToast(t('channels.toggleFailed', { message: error.message }), "error");
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ["channels"] });
@@ -639,7 +642,7 @@ export function Channels({ createMode = false, editRoute = false }: { createMode
     onSuccess: (response) => {
       const candidates = normalizeFetchedModelCandidates((response.data as ChannelModelMapping[]) || []);
       if (candidates.length === 0) {
-        addToast("未获取到可选模型", "error");
+        addToast(t('channels.noFetchedModels'), "error");
         return;
       }
 
@@ -650,7 +653,7 @@ export function Channels({ createMode = false, editRoute = false }: { createMode
       setIsFetchedModelsDialogOpen(true);
     },
     onError: (error: Error) => {
-      addToast("获取模型失败：" + error.message, "error");
+      addToast(t('channels.fetchModelsFailed', { message: error.message }), "error");
     },
   });
 
@@ -687,7 +690,7 @@ export function Channels({ createMode = false, editRoute = false }: { createMode
       if (!targetChannel) {
         resetForm();
         setView("list");
-        addToast("未找到对应渠道", "error");
+        addToast(t('channels.notFound'), "error");
         navigate("/channels", { replace: true });
         return;
       }
@@ -698,7 +701,7 @@ export function Channels({ createMode = false, editRoute = false }: { createMode
 
     resetForm();
     setView("list");
-  }, [addToast, createMode, data, isLoading, isRouteEdit, navigate, openChannelForEdit, resetForm, routeKey]);
+  }, [addToast, createMode, data, isLoading, isRouteEdit, navigate, openChannelForEdit, resetForm, routeKey, t]);
 
   const closeForm = () => {
     resetForm();
@@ -719,7 +722,7 @@ export function Channels({ createMode = false, editRoute = false }: { createMode
   };
 
   const handleDelete = (key: string) => {
-    if (confirm("确定要删除此渠道吗？")) {
+    if (confirm(t('channels.deleteConfirm'))) {
       deleteMutation.mutate(key);
     }
   };
@@ -732,7 +735,7 @@ export function Channels({ createMode = false, editRoute = false }: { createMode
     const apiKeys = parseApiKeys(apiKeysInput);
 
     if (!formData.type || !formData.endpoint || apiKeys.length === 0) {
-      addToast("请先填写渠道类型、API 端点和 API 密钥", "error");
+      addToast(t('channels.fillTypeEndpointKey'), "error");
       return;
     }
 
@@ -780,18 +783,18 @@ export function Channels({ createMode = false, editRoute = false }: { createMode
       );
 
     if (selectedModels.length === 0) {
-      addToast("请至少选择一个模型", "error");
+      addToast(t('channels.selectAtLeastOneModel'), "error");
       return;
     }
 
     applyModels(selectedModels);
     setIsFetchedModelsDialogOpen(false);
-    addToast(`已写入 ${selectedModels.length} 个模型`, "success");
+    addToast(t('channels.modelsApplied', { count: selectedModels.length }), "success");
   };
 
   const handleSave = () => {
     if (!channelKey) {
-      addToast("请填写渠道标识", "error");
+      addToast(t('channels.fillChannelKey'), "error");
       return;
     }
 
@@ -804,7 +807,7 @@ export function Channels({ createMode = false, editRoute = false }: { createMode
     }
 
     if (!formData.name || !formData.endpoint || apiKeys.length === 0) {
-      addToast("请填写所有必填字段", "error");
+      addToast(t('channels.fillRequired'), "error");
       return;
     }
 
@@ -820,7 +823,7 @@ export function Channels({ createMode = false, editRoute = false }: { createMode
       try {
         config = normalizeChannelFormConfig(JSON.parse(jsonValue));
       } catch {
-        addToast("JSON 格式错误", "error");
+        addToast(t('common.jsonFormatError'), "error");
         return;
       }
 
@@ -864,7 +867,7 @@ export function Channels({ createMode = false, editRoute = false }: { createMode
       loadFormConfig(config);
       setEditMode("form");
     } catch {
-      addToast("JSON 格式错误", "error");
+      addToast(t('common.jsonFormatError'), "error");
     }
   };
 
@@ -955,8 +958,8 @@ export function Channels({ createMode = false, editRoute = false }: { createMode
   if (view === "list") {
     return (
       <PageContainer
-        title="渠道管理"
-        description="配置 AI 服务商接口，管理模型和负载均衡策略"
+        title={t('channels.title')}
+        description={t('channels.description')}
         actions={
           <div className="flex items-center gap-2">
             <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching}>
@@ -964,7 +967,7 @@ export function Channels({ createMode = false, editRoute = false }: { createMode
             </Button>
             <Button size="sm" onClick={handleAdd}>
               <Plus className="h-4 w-4" />
-              <span className="hidden sm:inline ml-1">添加</span>
+              <span className="hidden sm:inline ml-1">{t('common.add')}</span>
             </Button>
           </div>
         }
@@ -974,7 +977,7 @@ export function Channels({ createMode = false, editRoute = false }: { createMode
             <div className="relative max-w-sm">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="搜索渠道..."
+                placeholder={t('channels.searchPlaceholder')}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-9"
@@ -987,7 +990,7 @@ export function Channels({ createMode = false, editRoute = false }: { createMode
           <div className="flex items-center justify-center py-20">
             <div className="flex flex-col items-center gap-3">
               <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-              <span className="text-sm text-muted-foreground">加载中...</span>
+              <span className="text-sm text-muted-foreground">{t('common.loading')}</span>
             </div>
           </div>
         ) : !data || data.length === 0 ? (
@@ -996,13 +999,13 @@ export function Channels({ createMode = false, editRoute = false }: { createMode
               <div className="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center mb-4">
                 <LinkIcon className="h-7 w-7 text-primary" />
               </div>
-              <h3 className="font-semibold text-lg mb-2">添加您的第一个渠道</h3>
+              <h3 className="font-semibold text-lg mb-2">{t('channels.emptyTitle')}</h3>
               <p className="text-muted-foreground text-sm text-center max-w-sm mb-6">
-                连接到 AI 服务商（如 OpenAI、Gemini、Azure、Claude），用于代理和转发 API 请求。
+                {t('channels.emptyDescription')}
               </p>
               <Button onClick={handleAdd} size="lg">
                 <Plus className="h-4 w-4 mr-2" />
-                添加渠道
+                {t('channels.addChannel')}
               </Button>
             </CardContent>
           </Card>
@@ -1016,8 +1019,8 @@ export function Channels({ createMode = false, editRoute = false }: { createMode
                 const enabledModelCount = (config.models || []).filter((model) => model.enabled !== false).length;
                 const modelSummary =
                   enabledModelCount === modelCount
-                    ? `${modelCount} 个模型`
-                    : `${enabledModelCount}/${modelCount} 个模型`;
+                    ? t('channels.modelCount', { count: modelCount })
+                    : t('channels.modelCountPartial', { enabled: enabledModelCount, total: modelCount });
                 const isMenuOpen = openMenu === channel.key;
                 const isEnabled = config.enabled !== false;
                 const isToggling =
@@ -1050,14 +1053,14 @@ export function Channels({ createMode = false, editRoute = false }: { createMode
                                 onClick={() => handleEdit(channel)}
                               >
                                 <Pencil className="h-4 w-4" />
-                                编辑
+                                {t('common.edit')}
                               </button>
                               <button
                                 className="w-full px-3 py-2 text-sm text-left hover:bg-muted flex items-center gap-2 text-destructive"
                                 onClick={() => handleDelete(channel.key)}
                               >
                                 <Trash2 className="h-4 w-4" />
-                                删除
+                                {t('common.delete')}
                               </button>
                             </div>
                           )}
@@ -1076,7 +1079,7 @@ export function Channels({ createMode = false, editRoute = false }: { createMode
                       </div>
                       <div className="flex items-center justify-between rounded-lg border bg-muted/20 px-3 py-2">
                         <div>
-                          <div className="text-sm font-medium">运行状态</div>
+                          <div className="text-sm font-medium">{t('channels.runningStatus')}</div>
                           <div
                             className={cn(
                               "mt-1 text-xs font-medium",
@@ -1085,14 +1088,14 @@ export function Channels({ createMode = false, editRoute = false }: { createMode
                                 : "text-amber-600 dark:text-amber-400",
                             )}
                           >
-                            {isEnabled ? "已启用" : "已停用"}
+                            {isEnabled ? t('common.enabled') : t('common.disabled')}
                           </div>
                         </div>
                         <Switch
                           checked={isEnabled}
                           disabled={isToggling}
                           onCheckedChange={(checked) => handleToggleEnabled(channel, checked)}
-                          aria-label={`${config.name || channel.key} 渠道启用开关`}
+                          aria-label={`${config.name || channel.key} ${t('channels.channelStatus')}`}
                         />
                       </div>
                     </div>
@@ -1110,9 +1113,6 @@ export function Channels({ createMode = false, editRoute = false }: { createMode
                       <div className="w-40 text-sm text-muted-foreground truncate font-mono" title={config.endpoint}>
                         {config.endpoint.replace(/^https?:\/\//, "").split("/")[0]}
                       </div>
-                      {/* <div className="w-20 text-sm text-center flex-shrink-0">
-                        <span className="text-muted-foreground">{} 模型</span>
-                      </div> */}
                       <div className="text-xs text-center flex-shrink-0">
                         <span className="text-indigo-500 bg-indigo-500/10 px-3 h-6 rounded-full flex items-center justify-center">
                           {modelSummary}
@@ -1128,7 +1128,7 @@ export function Channels({ createMode = false, editRoute = false }: { createMode
                           checked={isEnabled}
                           disabled={isToggling}
                           onCheckedChange={(checked) => handleToggleEnabled(channel, checked)}
-                          aria-label={`${config.name || channel.key} 渠道启用开关`}
+                          aria-label={`${config.name || channel.key} ${t('channels.channelStatus')}`}
                         />
                       </div>
                       <div className="flex items-center gap-1 flex-shrink-0">
@@ -1149,7 +1149,7 @@ export function Channels({ createMode = false, editRoute = false }: { createMode
                 );
               })}
               {filteredData?.length === 0 && searchQuery && (
-                <div className="p-8 text-center text-muted-foreground">未找到匹配的渠道</div>
+                <div className="p-8 text-center text-muted-foreground">{t('channels.noMatchingChannels')}</div>
               )}
             </div>
           </Card>
@@ -1164,7 +1164,7 @@ export function Channels({ createMode = false, editRoute = false }: { createMode
         <div className="max-w-4xl mx-auto flex items-center justify-center py-20">
           <div className="flex flex-col items-center gap-3">
             <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-            <span className="text-sm text-muted-foreground">加载渠道中...</span>
+            <span className="text-sm text-muted-foreground">{t('channels.loadingChannel')}</span>
           </div>
         </div>
       </div>
@@ -1177,13 +1177,13 @@ export function Channels({ createMode = false, editRoute = false }: { createMode
         <div className="mb-6">
           <Button variant="ghost" size="sm" className="mb-3 -ml-2 text-muted-foreground" onClick={closeForm}>
             <ArrowLeft className="h-4 w-4 mr-1" />
-            返回列表
+            {t('common.back')}
           </Button>
           <div className="flex items-center justify-between">
-            <h1 className="text-2xl font-bold tracking-tight">{editingKey ? "编辑渠道" : "添加渠道"}</h1>
+            <h1 className="text-2xl font-bold tracking-tight">{editingKey ? t('channels.editChannel') : t('channels.addChannel')}</h1>
             <Button variant="outline" size="sm" onClick={toggleEditMode}>
               {editMode === "form" ? <FileJson className="h-4 w-4 mr-1" /> : <FileText className="h-4 w-4 mr-1" />}
-              {editMode === "form" ? "JSON" : "表单"}
+              {editMode === "form" ? t('common.json') : t('common.form')}
             </Button>
           </div>
         </div>
@@ -1191,12 +1191,12 @@ export function Channels({ createMode = false, editRoute = false }: { createMode
         <div className="space-y-6">
           <Card>
             <CardContent className="p-5">
-              <h3 className="font-medium">渠道标识</h3>
-              <p className="text-sm text-muted-foreground mb-4">用于内部识别的唯一标识</p>
+              <h3 className="font-medium">{t('channels.channelKey')}</h3>
+              <p className="text-sm text-muted-foreground mb-4">{t('channels.channelKeyDesc')}</p>
               <Input
                 value={channelKey}
                 onChange={(e) => setChannelKey(e.target.value)}
-                placeholder="例如：azure-gpt4-east"
+                placeholder={t('channels.channelKeyPlaceholder')}
                 disabled={!!editingKey}
                 className="font-mono text-sm"
               />
@@ -1207,21 +1207,21 @@ export function Channels({ createMode = false, editRoute = false }: { createMode
             <>
               <Card>
                 <CardContent className="p-5">
-                  <h3 className="font-medium mb-4">基本信息</h3>
+                  <h3 className="font-medium mb-4">{t('channels.basicInfo')}</h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label className="text-sm">
-                        渠道名称 <span className="text-destructive">*</span>
+                        {t('channels.channelNameRequired')} <span className="text-destructive">*</span>
                       </Label>
                       <Input
                         value={formData.name}
                         onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                        placeholder="例如：Azure GPT-4 东部"
+                        placeholder={t('channels.channelNamePlaceholder')}
                       />
                     </div>
                     <div className="space-y-2">
                       <Label className="text-sm">
-                        渠道类型 <span className="text-destructive">*</span>
+                        {t('channels.channelTypeRequired')} <span className="text-destructive">*</span>
                       </Label>
                       <Select
                         value={formData.type}
@@ -1235,9 +1235,9 @@ export function Channels({ createMode = false, editRoute = false }: { createMode
                       </Select>
                     </div>
                     <div className="space-y-2">
-                      <Label className="text-sm">渠道权重</Label>
+                      <Label className="text-sm">{t('channels.channelWeight')}</Label>
                       <ButtonGroup
-                        aria-label="渠道权重"
+                        aria-label={t('channels.channelWeight')}
                         value={normalizeChannelWeight(formData.weight)}
                         options={channelWeightOptions}
                         onValueChange={(value) =>
@@ -1249,10 +1249,10 @@ export function Channels({ createMode = false, editRoute = false }: { createMode
                         className="flex h-10 items-center px-2 gap-1"
                         buttonClassName="rounded-sm w-8 h-6 data-[state=on]:bg-amber-600 data-[state=on]:text-white"
                       />
-                      <p className="text-xs text-muted-foreground">相同模型权重优先，相同权重随机分配。</p>
+                      <p className="text-xs text-muted-foreground">{t('channels.channelWeightHint')}</p>
                     </div>
                     <div className="">
-                      <Label className="text-sm">渠道状态</Label>
+                      <Label className="text-sm">{t('channels.channelStatus')}</Label>
                       <div className="h-10 flex items-center gap-3 mb-2 rounded-md px-3 border border-input hover:border-muted-foreground/30">
                         <span
                           className={cn(
@@ -1262,16 +1262,16 @@ export function Channels({ createMode = false, editRoute = false }: { createMode
                               : "text-amber-600 dark:text-amber-400",
                           )}
                         >
-                          {formData.enabled !== false ? "已启用" : "已停用"}
+                          {formData.enabled !== false ? t('common.enabled') : t('common.disabled')}
                         </span>
                         <Switch
                           checked={formData.enabled !== false}
                           onCheckedChange={(checked) => setFormData({ ...formData, enabled: checked })}
-                          aria-label="渠道状态开关"
+                          aria-label={t('channels.channelStatus')}
                         />
                       </div>
                       <p className="text-xs text-muted-foreground">
-                        停用后不会参与请求选路，也不会出现在可用模型列表中。
+                        {t('channels.channelStatusHint')}
                       </p>
                     </div>
                   </div>
@@ -1284,25 +1284,25 @@ export function Channels({ createMode = false, editRoute = false }: { createMode
                     <div>
                       <h3 className="font-medium flex items-center gap-2">
                         <Globe className="h-4 w-4 text-muted-foreground" />
-                        连接配置
+                        {t('channels.connectionConfig')}
                       </h3>
                     </div>
                   </div>
                   <div className="space-y-4">
                     <div className="space-y-2">
                       <Label className="text-sm flex items-center gap-2">
-                        API 端点 <span className="text-destructive">*</span>
+                        {t('channels.apiEndpoint')} <span className="text-destructive">*</span>
                       </Label>
                       <Input
                         value={formData.endpoint}
                         onChange={(e) => setFormData({ ...formData, endpoint: e.target.value })}
                         placeholder={endpointPlaceholder}
                       />
-                      <p className="text-xs text-muted-foreground">预览：{endpointPreview || formData.type}</p>
+                      <p className="text-xs text-muted-foreground">{t('channels.apiEndpointPreview', { preview: endpointPreview || formData.type })}</p>
                     </div>
                     <div className="space-y-2">
                       <Label className="text-sm">
-                        API 密钥 <span className="text-destructive">*</span>
+                        {t('channels.apiKeys')} <span className="text-destructive">*</span>
                       </Label>
                       <Textarea
                         value={apiKeysInput}
@@ -1315,7 +1315,7 @@ export function Channels({ createMode = false, editRoute = false }: { createMode
                         className="font-mono text-sm"
                       />
                       <p className="text-xs text-muted-foreground">
-                        可配置多个密钥，每行一个，请求会随机选取一个密钥发起调用。
+                        {t('channels.apiKeysHint')}
                       </p>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -1326,8 +1326,8 @@ export function Channels({ createMode = false, editRoute = false }: { createMode
                           onCheckedChange={(checked) => setFormData({ ...formData, auto_retry: checked })}
                         />
                         <div>
-                          <div className="text-sm font-medium">自动重试</div>
-                          <p className="mt-1 text-xs text-muted-foreground">渠道遇可重试错误时，最多自动重试 3 次</p>
+                          <div className="text-sm font-medium">{t('channels.autoRetry')}</div>
+                          <p className="mt-1 text-xs text-muted-foreground">{t('channels.autoRetryHint')}</p>
                         </div>
                       </label>
                       <label className="flex items-start gap-3 p-4 rounded-lg border bg-muted/30 cursor-pointer">
@@ -1337,9 +1337,9 @@ export function Channels({ createMode = false, editRoute = false }: { createMode
                           onCheckedChange={(checked) => setFormData({ ...formData, auto_rotate: checked })}
                         />
                         <div>
-                          <div className="text-sm font-medium">自动轮换</div>
+                          <div className="text-sm font-medium">{t('channels.autoRotate')}</div>
                           <p className="mt-1 text-xs text-muted-foreground">
-                            重试时随机切换同渠道其他密钥；关闭后始终重试当前密钥
+                            {t('channels.autoRotateHint')}
                           </p>
                         </div>
                       </label>
@@ -1354,15 +1354,15 @@ export function Channels({ createMode = false, editRoute = false }: { createMode
                     <div>
                       <h3 className="font-medium flex items-center gap-2">
                         <Cpu className="h-4 w-4 text-muted-foreground" />
-                        模型配置
+                        {t('channels.modelConfig')}
                       </h3>
                       <p className="text-sm text-muted-foreground">
-                        外部使用模型名称调用，程序会自动映射到渠道模型 ID。
+                        {t('channels.modelConfigDesc')}
                       </p>
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
                       <ButtonGroup
-                        aria-label="模型配置编辑模式"
+                        aria-label={t('channels.modelConfig')}
                         value={modelEditorMode}
                         options={modelEditorModeOptions}
                         onValueChange={setModelEditorModeWithSync}
@@ -1376,7 +1376,7 @@ export function Channels({ createMode = false, editRoute = false }: { createMode
                         disabled={fetchModelsMutation.isPending}
                       >
                         <RefreshCw className={cn("h-4 w-4", fetchModelsMutation.isPending && "animate-spin")} />
-                        获取模型列表
+                        {t('channels.fetchModelList')}
                       </Button>
                     </div>
                   </div>
@@ -1384,9 +1384,9 @@ export function Channels({ createMode = false, editRoute = false }: { createMode
                   {modelEditorMode === "visual" ? (
                     <div className="space-y-2">
                       <div className="hidden md:grid md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_100px] md:gap-2 text-xs font-medium text-muted-foreground">
-                        <div>模型 ID</div>
-                        <div>模型名称</div>
-                        <div className="text-center">状态 / 删除</div>
+                        <div>{t('channels.modelId')}</div>
+                        <div>{t('channels.modelName')}</div>
+                        <div className="text-center">{t('channels.modelStatusDelete')}</div>
                       </div>
                       {modelRows.map((row, index) => {
                         const canDelete = !isEmptyModelRow(row);
@@ -1399,13 +1399,13 @@ export function Channels({ createMode = false, editRoute = false }: { createMode
                             <Input
                               value={row.id}
                               onChange={(e) => updateModelRow(index, "id", e.target.value)}
-                              placeholder="模型ID，例如：gpt-4.1-mini"
+                              placeholder={t('channels.modelIdPlaceholder')}
                               className="text-sm"
                             />
                             <Input
                               value={row.name}
                               onChange={(e) => updateModelRow(index, "name", e.target.value)}
-                              placeholder="模型名称，默认等于模型ID"
+                              placeholder={t('channels.modelNamePlaceholder')}
                               className="text-sm"
                             />
                             <div className="flex h-10 items-center justify-center gap-2">
@@ -1417,7 +1417,7 @@ export function Channels({ createMode = false, editRoute = false }: { createMode
                                   updateModelRowsState(nextRows);
                                 }}
                                 disabled={!canDelete}
-                                aria-label={`模型 ${row.name || row.id || index} 启用开关`}
+                                aria-label={`${row.name || row.id || index}`}
                               />
                               <Button
                                 type="button"
@@ -1444,7 +1444,7 @@ export function Channels({ createMode = false, editRoute = false }: { createMode
                         placeholder='[{"id":"gpt-4.1-mini","name":"gpt-4.1-mini","enabled":true}]'
                       />
                       <p className="text-xs text-muted-foreground">
-                        JSON 结构为数组，每项包含 `id`、`name`、`enabled`。
+                        {t('channels.modelJsonStructure')}
                       </p>
                     </div>
                   )}
@@ -1454,7 +1454,7 @@ export function Channels({ createMode = false, editRoute = false }: { createMode
           ) : (
             <Card>
               <CardContent className="p-5">
-                <h3 className="font-medium mb-4">JSON 配置</h3>
+                <h3 className="font-medium mb-4">{t('channels.jsonConfig')}</h3>
                 <Textarea
                   value={jsonValue}
                   onChange={(e) => setJsonValue(e.target.value)}
@@ -1469,9 +1469,9 @@ export function Channels({ createMode = false, editRoute = false }: { createMode
           <Dialog open={isFetchedModelsDialogOpen} onOpenChange={setIsFetchedModelsDialogOpen}>
             <DialogContent className="max-w-3xl">
               <DialogHeader>
-                <DialogTitle>选择要写入的模型</DialogTitle>
+                <DialogTitle>{t('channels.selectModelsTitle')}</DialogTitle>
                 <DialogDescription>
-                  先从上游模型列表中批量勾选，再写入当前渠道配置。已存在且 ID 相同的模型会保留原有别名和启用状态。
+                  {t('channels.selectModelsDesc')}
                 </DialogDescription>
               </DialogHeader>
 
@@ -1482,13 +1482,13 @@ export function Channels({ createMode = false, editRoute = false }: { createMode
                     <Input
                       value={fetchedModelsSearchQuery}
                       onChange={(event) => setFetchedModelsSearchQuery(event.target.value)}
-                      placeholder="搜索模型 ID 或展示名称"
+                      placeholder={t('channels.searchModelPlaceholder')}
                       className="pl-9"
                     />
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="text-xs text-muted-foreground">
-                      已选 {selectedFetchedModelIds.length} / {fetchedModelCandidates.length}
+                      {t('channels.selectedCount', { selected: selectedFetchedModelIds.length, total: fetchedModelCandidates.length })}
                     </span>
                     <Button
                       type="button"
@@ -1498,10 +1498,10 @@ export function Channels({ createMode = false, editRoute = false }: { createMode
                         setSelectedFetchedModelIds(fetchedModelCandidates.map((candidate) => candidate.id))
                       }
                     >
-                      全选
+                      {t('common.selectAll')}
                     </Button>
                     <Button type="button" variant="outline" size="sm" onClick={() => setSelectedFetchedModelIds([])}>
-                      清空
+                      {t('common.clearAll')}
                     </Button>
                   </div>
                 </div>
@@ -1533,16 +1533,16 @@ export function Channels({ createMode = false, editRoute = false }: { createMode
                       })}
                     </div>
                   ) : (
-                    <div className="px-4 py-12 text-center text-sm text-muted-foreground">没有匹配的模型</div>
+                    <div className="px-4 py-12 text-center text-sm text-muted-foreground">{t('channels.noMatchingModels')}</div>
                   )}
                 </div>
 
                 <div className="flex items-center justify-end gap-3">
                   <Button type="button" variant="outline" onClick={() => setIsFetchedModelsDialogOpen(false)}>
-                    取消
+                    {t('common.cancel')}
                   </Button>
                   <Button type="button" onClick={handleApplyFetchedModels}>
-                    写入所选模型
+                    {t('channels.applyModels')}
                   </Button>
                 </div>
               </div>
@@ -1551,18 +1551,18 @@ export function Channels({ createMode = false, editRoute = false }: { createMode
 
           <div className="flex items-center justify-end gap-3 pt-2">
             <Button variant="outline" onClick={closeForm}>
-              取消
+              {t('common.cancel')}
             </Button>
             <Button onClick={handleSave} disabled={saveMutation.isPending}>
               {saveMutation.isPending ? (
                 <>
                   <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                  保存中...
+                  {t('common.saving')}
                 </>
               ) : (
                 <>
                   <Check className="h-4 w-4 mr-2" />
-                  保存渠道
+                  {t('channels.saveChannel')}
                 </>
               )}
             </Button>
