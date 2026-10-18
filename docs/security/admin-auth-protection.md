@@ -1,59 +1,63 @@
-# 管理员认证与防护
+# Admin Auth and Protection
 
-本文档聚焦管理后台的认证方式、当前已启用的应用层保护，以及生产环境建议补齐的边缘层防护。
+<p align="right">
+  <b>English</b> | <a href="./admin-auth-protection.zhCN.md">中文</a>
+</p>
 
-## 认证模式
+This document covers admin console authentication, application-layer protections already enabled, and edge protections recommended for production.
 
-当前版本支持两种后台认证模式：
+## Auth modes
 
-- 基础模式：仅校验 `ADMIN_TOKEN`
-- 增强模式：在系统设置中配置并验证 Telegram `Bot Token` / `Chat ID` 后，启用 Telegram 验证码登录
+The current version supports two admin auth modes:
 
-当前实现的认证与安全要点：
+- Basic: validate `ADMIN_TOKEN` only
+- Enhanced: after Telegram `Bot Token` / `Chat ID` are configured and verified in System Settings, enable Telegram verification-code login
 
-- 管理后台使用 session cookie，而不是每次请求直接传管理员令牌
-- session 有效期按登录安全级别区分：未启用 Telegram 验证时为 7 天，启用后为 30 天
-- 登录、验证码验证和 Telegram 通知都带应用层限速
-- API 文档可在系统设置中关闭；关闭后 `/api/docs`、`/api/redocs`、`/api/openapi.json` 会直接返回 `404`
+Current auth and security highlights:
 
-生产环境不要只依赖应用层逻辑，仍应额外配置 Cloudflare WAF / Rate Limiting。
+- The admin console uses a session cookie instead of sending the admin token on every request
+- Session TTL depends on security level: 7 days without Telegram verification, 30 days with it
+- Login, code verification, and Telegram notifications are rate-limited at the app layer
+- API docs can be disabled in System Settings; when off, `/api/docs`, `/api/redocs`, and `/api/openapi.json` return `404`
 
-## 应用层
+Do not rely on application logic alone in production — also configure Cloudflare WAF / Rate Limiting.
 
-当前版本已在应用层启用以下保护：
+## Application layer
 
-- `/api/admin/auth/login` 按 IP 统计请求频率，超限后返回 `429`
-- 管理员令牌连续失败达到阈值后进入冻结窗口
-- `/api/admin/auth/verify` 按 IP 统计请求频率，超限后返回 `429`
-- 验证码连续失败达到阈值后进入冻结窗口
-- 验证码 challenge 绑定首次请求 IP，来源变化后要求重新获取验证码
-- Telegram 验证码通知按 IP 和全局双层节流
-- Telegram 登录结果通知按 IP 和全局双层节流，超限后静默跳过
+Protections already enabled:
 
-## 相关配置
+- `/api/admin/auth/login` is rate-limited per IP; excess returns `429`
+- Repeated admin-token failures enter a freeze window after a threshold
+- `/api/admin/auth/verify` is rate-limited per IP; excess returns `429`
+- Repeated verification-code failures enter a freeze window after a threshold
+- Verification challenges bind to the first request IP; a source change requires a new code
+- Telegram verification-code notifications are throttled per IP and globally
+- Telegram login-result notifications are throttled per IP and globally; excess is silently skipped
 
-认证与防护相关设置主要位于管理后台的 `System Settings` 页面：
+## Related settings
 
-- Telegram 管理员验证开关
+Auth and protection settings live mainly under **System Settings**:
+
+- Telegram admin verification toggle
 - Telegram `Bot Token` / `Chat ID`
-- API 文档开关
+- API docs toggle
 
-建议流程：
+Suggested flow:
 
-1. 先配置 `ADMIN_TOKEN`
-2. 在系统设置中填写 Telegram 配置
-3. 发送测试消息并完成验证
-4. 再启用 Telegram 二次验证
-5. 根据暴露面决定是否关闭 API 文档
+1. Configure `ADMIN_TOKEN` first
+2. Fill in Telegram settings
+3. Send a test message and complete verification
+4. Enable Telegram 2FA
+5. Decide whether to disable API docs based on exposure
 
-## 边缘层
+## Edge layer
 
-应用层限速不能替代 Cloudflare 边缘层拦截。生产环境至少再加一层 WAF / Rate Limiting：
+App-layer rate limits do not replace Cloudflare edge enforcement. In production, add WAF / Rate Limiting:
 
-- 保护路径：
+- Protect paths:
   - `POST /api/admin/auth/login`
   - `POST /api/admin/auth/verify`
-- 推荐匹配表达式：
+- Recommended match expression:
 
 ```txt
 http.request.method eq "POST" and (
@@ -62,21 +66,21 @@ http.request.method eq "POST" and (
 )
 ```
 
-- 推荐计数维度：
+- Recommended counting dimensions:
   - `ip.src`
   - `cf.colo.id`
-- 推荐动作：
-  - 首选 `Managed Challenge`
-  - 高频攻击场景可改为 `Block`
-- 推荐起始阈值：
-  - `login`: 1 分钟内 5 次
-  - `verify`: 1 分钟内 8 次
-  - 缓解时长：15 分钟
+- Recommended actions:
+  - Prefer `Managed Challenge`
+  - Use `Block` under high-volume attack
+- Suggested starting thresholds:
+  - `login`: 5 per minute
+  - `verify`: 8 per minute
+  - Mitigation duration: 15 minutes
 
-## 落地顺序
+## Rollout order
 
-1. 先在 Cloudflare 控制台或 API 建立登录限速规则
-2. 再观察应用层 `429` 是否仍大量出现
-3. 完成 Telegram 验证配置并确认 session 登录链路正常
-4. 根据实际暴露情况决定是否关闭 API 文档
-5. 若仍有 Telegram 刷屏或管理口扫号，再继续收紧边缘层阈值
+1. Create login rate-limit rules in the Cloudflare dashboard or API
+2. Watch whether app-layer `429`s still spike
+3. Finish Telegram verification setup and confirm session login works
+4. Decide whether to disable API docs based on real exposure
+5. If Telegram spam or admin-port scanning continues, tighten edge thresholds further

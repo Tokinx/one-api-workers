@@ -1,6 +1,6 @@
 #!/bin/bash
 # E2E tests against mock upstream
-# Prerequisites: mock-upstream running on :9999, wrangler dev on :8788
+# Prerequisites: mock-upstream running on :9999, wrangler dev on :8787
 
 API="${API:-http://localhost:8787}"
 MOCK_API="${MOCK_API:-http://localhost:9999}"

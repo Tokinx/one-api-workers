@@ -1,6 +1,10 @@
 # One API on Workers Frontend
 
-Modern React + Vite + TypeScript frontend for One API on Workers management platform.
+<p align="right">
+  <b>English</b> | <a href="./README.zhCN.md">中文</a>
+</p>
+
+Modern React + Vite + TypeScript frontend for the One API on Workers management platform.
 
 ## Features
 
@@ -24,7 +28,7 @@ bun install
 bun run dev
 
 # Open the app through the Worker entry
-# http://127.0.0.1:8788
+# http://127.0.0.1:8787
 
 # Or start only the frontend from ./frontend
 cd frontend
@@ -61,15 +65,18 @@ The browser should access the Worker URL, while the Worker proxies frontend requ
 No Vite `server.proxy` is required in this mode.
 You still need the Vite dev server running, because the Worker proxies page/module/HMR requests to it instead of serving built assets.
 
-If you open `http://127.0.0.1:5173` directly, set `VITE_API_BASE_URL=http://127.0.0.1:8788` yourself.
+If you open `http://127.0.0.1:5173` directly, set `VITE_API_BASE_URL=http://127.0.0.1:8787` yourself.
 
-## Features
+## Pages
 
-- **Dashboard**: Overview and quick start guide
-- **API Test**: Test API endpoints with custom requests
-- **Channels**: Manage OpenAI, Azure OpenAI, and Claude channels
-- **Tokens**: Create and manage API tokens with quota limits
-- **Pricing**: Configure model pricing multipliers
+- **Dashboard**: Overview, key metrics, and distribution charts
+- **Usage Logs**: Query and filter detailed usage logs by time range, token, channel, and model
+- **Channels**: Manage OpenAI, Azure OpenAI, Claude, Gemini, Responses, and Audio channels with key rotation and retry
+- **Tokens**: Create and manage API tokens with quota limits and channel access scopes
+- **Pricing**: Configure model pricing (volume-based, request-based, or free)
+- **API Test**: Test API endpoints (`/v1/chat/completions`, `/v1/messages`, `/v1/responses`, `/v1/audio/speech`) with live responses
+- **System Settings**: Configure Telegram 2FA, currency display precision, and API docs toggle
+- **Login**: Admin authentication with session cookies and optional Telegram verification code
 
 ## Building
 

@@ -1,33 +1,37 @@
-# 使用与配置
+# Usage and Configuration
 
-本文档整理了项目的日常使用方式、渠道与 Token 配置要点，以及监控、安全和 API 文档入口。
+<p align="right">
+  <b>English</b> | <a href="./usage-and-configuration.zhCN.md">中文</a>
+</p>
 
-## 使用指南
+This document covers day-to-day usage, channel and token configuration, plus monitoring, security, and API docs entry points.
 
-### 渠道配置
+## Usage Guide
 
-1. 访问 `https://your-domain.com`
-2. 使用管理员 Token 登录
-3. 进入 **渠道管理** 页面
-4. 点击 **添加渠道**
-5. 选择渠道类型（OpenAI、Azure OpenAI、Claude、Responses）
-6. 填写渠道标识和配置信息（名称、端点、API 密钥、模型映射）
-7. 点击 **保存渠道**
+### Channel setup
 
-提示：系统会根据选择的渠道类型自动显示相应的配置字段。
+1. Open `https://your-domain.com`
+2. Sign in with the admin token
+3. Go to **Channels**
+4. Click **Add Channel**
+5. Choose a channel type (OpenAI, Gemini, Azure OpenAI, Claude, Claude to OpenAI, Responses, Audio)
+6. Fill in the channel identity and config (name, endpoint, API key, model mapping)
+7. Click **Save Channel**
 
-### Token 创建和使用
+Tip: the form shows fields based on the selected channel type.
 
-1. 在 Web 界面切换到 **令牌管理**
-2. 点击 **添加令牌**
-3. 填写令牌名称，系统会自动生成 `sk-` 开头的 Token
-4. 配置允许访问的渠道和配额
-5. 点击 **保存令牌**
-6. 使用复制按钮获取 Token，用于 API 调用
+### Create and use a token
 
-### OpenAI 兼容 API
+1. Switch to **Tokens** in the web UI
+2. Click **Add Token**
+3. Enter a name; the system generates a token starting with `sk-`
+4. Configure allowed channels and quota (enter in USD; converted internally where $1.00 = 10^9 raw units)
+5. Click **Save Token**
+6. Copy the token for API calls
 
-本项目提供兼容 OpenAI 的接口：
+### Common Proxy API Examples
+
+#### OpenAI Chat Completions API
 
 ```bash
 curl https://your-domain.com/v1/chat/completions \
@@ -44,9 +48,28 @@ curl https://your-domain.com/v1/chat/completions \
   }'
 ```
 
-### Responses API
+#### Claude Messages API
 
-支持 OpenAI / Azure Responses：
+```bash
+curl https://your-domain.com/v1/messages \
+  -H "Content-Type: application/json" \
+  -H "x-api-key: YOUR_API_TOKEN" \
+  -H "anthropic-version: 2023-06-01" \
+  -d '{
+    "model": "claude-3-5-sonnet-20241022",
+    "max_tokens": 1024,
+    "messages": [
+      {
+        "role": "user",
+        "content": "Hello, Claude!"
+      }
+    ]
+  }'
+```
+
+#### Responses API
+
+OpenAI / Azure Responses are supported:
 
 ```bash
 curl https://your-domain.com/v1/responses \
@@ -58,49 +81,70 @@ curl https://your-domain.com/v1/responses \
   }'
 ```
 
-### API 测试工具
+#### Audio Speech (TTS) API
 
-管理界面内置 API 测试工具，无需额外工具即可调试请求。
+```bash
+curl https://your-domain.com/v1/audio/speech \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_API_TOKEN" \
+  -d '{
+    "model": "tts-1",
+    "input": "Today is a wonderful day to build something people love!",
+    "voice": "alloy"
+  }' \
+  --output speech.mp3
+```
 
-功能特性：
+#### Model List API
 
-- 一键测试：直接在 Web 界面中测试 API 调用
-- JSON 编辑器：支持 JSON 格式验证和语法高亮
-- 实时响应：显示响应时间、状态码和完整响应内容
-- 错误诊断：自动区分 HTTP 错误和 JSON 响应，便于排查问题
-- 一键复制：支持复制 Token 和响应内容
+```bash
+curl https://your-domain.com/v1/models \
+  -H "Authorization: Bearer YOUR_API_TOKEN"
+```
 
-使用步骤：
+### API Test tool
 
-1. 访问管理界面，切换到 **API 测试**
-2. 输入 API Token
-3. 编辑请求 JSON
-4. 点击 **发送请求**
-5. 查看响应结果和状态信息
+The admin UI includes a built-in API tester—no extra tools required.
 
-## 管理功能
+Features:
 
-### Web 管理界面
+- One-click tests from the web UI
+- JSON editor with validation and syntax highlighting
+- Live response: latency, status code, and full body
+- Error diagnosis: separates HTTP errors from JSON response bodies
+- One-click copy for tokens and responses
 
-访问 `https://your-domain.com` 即可使用 Web 管理界面，主要包括：
+Steps:
 
-- 渠道管理：添加、编辑、删除 AI 服务商
-- API Token 管理：生成、管理和监控 API Token 使用情况
-- 定价配置：灵活配置不同模型的定价策略
-- API 测试工具：内置测试界面，支持实时调试和错误排查
+1. Open the admin UI and switch to **API Test**
+2. Enter an API token
+3. Edit the request JSON
+4. Click **Send**
+5. Inspect the response and status
 
-管理界面特性：
+## Admin Features
 
-- 现代化 UI：响应式设计，支持桌面和移动设备
-- 实时反馈：操作结果即时显示，支持悬浮提示
-- 智能表单：自动生成 Token、JSON 格式验证、一键复制，并根据渠道类型智能显示配置字段
-- 安全认证：管理员 Token 认证，保护管理数据
+### Web admin UI
 
-## 配置说明
+Open `https://your-domain.com` for the web console:
 
-### 渠道配置
+- Channel management: add, edit, and remove AI providers
+- API token management: create, manage, and monitor token usage
+- Pricing: flexible per-model pricing strategies
+- API Test: built-in tester for live debugging
 
-目前支持以下 AI 服务商：
+UI highlights:
+
+- Modern responsive UI for desktop and mobile
+- Immediate feedback with toasts/tooltips
+- Smart forms: auto-generated tokens, JSON validation, one-click copy, fields by channel type
+- Admin-token auth to protect management data
+
+## Configuration
+
+### Channel configuration
+
+Supported providers:
 
 #### OpenAI
 
@@ -119,7 +163,7 @@ curl https://your-domain.com/v1/responses \
 
 #### Gemini
 
-Gemini 通过官方 OpenAI 兼容层接入，建议将 `endpoint` 配置为 `https://generativelanguage.googleapis.com/v1beta/openai/`。
+Gemini uses the official OpenAI-compatible layer. Prefer `endpoint` set to `https://generativelanguage.googleapis.com/v1beta/openai/`.
 
 ```json
 {
@@ -179,7 +223,7 @@ Gemini 通过官方 OpenAI 兼容层接入，建议将 `endpoint` 配置为 `htt
 }
 ```
 
-#### Azure OpenAI Responses（v1）
+#### Azure OpenAI Responses (v1)
 
 ```json
 {
@@ -193,60 +237,107 @@ Gemini 通过官方 OpenAI 兼容层接入，建议将 `endpoint` 配置为 `htt
 }
 ```
 
-渠道配置字段说明：
+#### Claude to OpenAI
 
-- `name`：渠道显示名称
-- `type`：服务商类型，支持 `openai`、`gemini`、`azure-openai`、`claude`、`openai-responses`、`azure-openai-responses`
-- `endpoint`：API 端点地址
-- `api_key`：API 密钥
-- `api_version`：API 版本，Azure OpenAI / Claude 可用；Azure Responses v1 请留空
-- `deployment_mapper`：模型名称映射关系，用于自定义外部模型名与上游部署名的映射
-
-### Token 配置
-
-支持详细的 Token 配置，包括名称、访问权限和配额管理：
+Converts Claude protocol requests into upstream OpenAI-compatible calls:
 
 ```json
 {
-  "name": "用户令牌1",
-  "channel_keys": ["azure-openai-1", "azure-openai-2"],
-  "total_quota": 1000000
+  "name": "My Claude to OpenAI",
+  "type": "claude-to-openai",
+  "endpoint": "https://api.openai.com/v1/",
+  "api_key": "sk-your-openai-api-key",
+  "deployment_mapper": {
+    "claude-3-5-sonnet-20241022": "gpt-4o"
+  }
 }
 ```
 
-Token 配置字段说明：
+#### OpenAI Audio (TTS)
 
-- `name`：Token 名称，便于管理识别
-- `channel_keys`：允许访问的渠道列表，空数组表示允许所有渠道
-- `total_quota`：总配额，基础单位为 1,000,000 tokens = $1.00
+```json
+{
+  "name": "My OpenAI Audio",
+  "type": "openai-audio",
+  "endpoint": "https://api.openai.com/v1/",
+  "api_key": "sk-your-openai-api-key",
+  "deployment_mapper": {
+    "tts-1": "tts-1",
+    "tts-1-hd": "tts-1-hd"
+  }
+}
+```
 
-## 监控与安全
+#### Azure OpenAI Audio (TTS)
 
-### 监控与统计
+```json
+{
+  "name": "My Azure Audio",
+  "type": "azure-openai-audio",
+  "endpoint": "https://your-resource.openai.azure.com/",
+  "api_key": "your-azure-api-key",
+  "api_version": "2024-02-15-preview",
+  "deployment_mapper": {
+    "tts-1": "your-tts-deployment-name"
+  }
+}
+```
 
-- 使用量统计：自动记录每次 API 调用的 Token 使用量
-- 费用计算：基于模型定价自动计算费用
-- 配额管理：支持 Token 级别的配额限制
-- 实时监控：Web 界面实时显示使用情况和剩余配额
+Field notes:
 
-### 核心优势
+- `name`: display name
+- `type`: provider type — `openai`, `gemini`, `azure-openai`, `claude`, `claude-to-openai`, `openai-responses`, `azure-openai-responses`, `openai-audio`, `azure-openai-audio`
+- `endpoint`: API base URL
+- `api_key`: API key
+- `api_version`: used by Azure OpenAI / Claude / Azure Audio; leave empty for Azure Responses v1
+- `deployment_mapper`: maps external model names to upstream deployment names
 
-- 零配置部署：基于 Cloudflare Workers，无需服务器维护
-- 全球加速：利用 Cloudflare 全球边缘网络，低延迟访问
-- 成本优化：按需计费，无固定服务器成本
-- 高可用性：依托 Cloudflare 基础设施保证可用性
-- 安全可靠：内置 Token 认证和配额管理机制
+### Token configuration
 
-### 安全性
+Tokens support name, access scope, and quota:
 
-- Token 认证：所有 API 调用需要有效的 Bearer Token
-- 管理员认证：管理接口使用独立的管理员 Token
-- CORS 支持：支持按需配置跨域访问策略
+```json
+{
+  "name": "user-token-1",
+  "channel_keys": ["azure-openai-1", "azure-openai-2"],
+  "total_quota": 1000000000
+}
+```
 
-## API 文档
+Field notes:
 
-部署后可访问以下地址查看 API 文档：
+- `name`: human-readable token name
+- `channel_keys`: allowed channels; empty array means all channels
+- `total_quota`: total quota stored internally in raw billing units (`1,000,000,000` raw units = $1.00 USD, or `-1` for unlimited). When configuring in the web UI, enter amounts in USD (e.g. `$1.00`), and the system will automatically convert to raw units
 
-- Swagger UI：`https://your-domain.com/api/docs`
-- ReDoc：`https://your-domain.com/api/redocs`
-- OpenAPI JSON：`https://your-domain.com/api/openapi.json`
+## Monitoring and Security
+
+### Monitoring and stats
+
+- Usage stats: token usage recorded per API call
+- Cost calculation: based on model pricing
+- Quota management: token-level limits
+- Live monitoring: usage and remaining quota in the web UI
+
+### Strengths
+
+- Zero-ops deploy on Cloudflare Workers
+- Global edge acceleration with low latency
+- Pay-as-you-go with no fixed server cost
+- High availability on Cloudflare infrastructure
+- Built-in token auth and quota controls
+
+### Security
+
+- Token auth: all API calls require a valid Bearer token or x-api-key
+- Admin auth: the management console uses session cookies with rate limiting and optional Telegram 2FA; see [Admin Auth and Protection](security/admin-auth-protection.md) for details
+- Testing & validation: for local E2E suite and integration tests, see [Testing and Verification](testing.md)
+- CORS: configure cross-origin access as needed
+
+## API Documentation
+
+After deploy, open:
+
+- Swagger UI: `https://your-domain.com/api/docs`
+- ReDoc: `https://your-domain.com/api/redocs`
+- OpenAPI JSON: `https://your-domain.com/api/openapi.json`

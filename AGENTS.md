@@ -26,10 +26,13 @@
 - Channel types: use string literals (e.g., `openai-responses`, `azure-openai-responses`).
 
 ## Testing & Lint
-- No dedicated test framework is currently configured.
-- Use `bun run build` (runs frontend TypeScript check + Vite build) as basic safety check for UI changes.
-- For backend changes, run `bun run dev` or `bun run dev:worker` and validate with the API Test page.
-- Frontend lint: `cd frontend && bun run lint` (ESLint with react-hooks and react-refresh rules).
+- Minimal checks: `bun run build` (runs frontend TypeScript check + Vite build) and `cd frontend && bun run lint` (ESLint).
+- Local E2E test suite available under `tests/` (see `docs/testing.md`):
+  1. `bun run tests/mock-upstream.ts` (starts mock upstream on `:9999`)
+  2. `bun run dev:worker` (starts local Worker on `:8787`)
+  3. `bash tests/setup-test-data.sh` (seeds test channels/tokens in local D1)
+  4. `bash tests/run-e2e.sh` (validates proxy paths, model list, header scrubbing, quota, admin login session/rate-limiting)
+- For manual backend checks, run `bun run dev` or `bun run dev:worker` and validate via the console's API Test page.
 
 ## Commit & Pull Request Guidelines
 - No formal commit conventions are documented in-repo; use clear, imperative messages (e.g., "Add responses proxy").
@@ -39,6 +42,7 @@
   - Screenshots for UI changes (from `frontend/`).
 
 ## Security & Configuration Tips
-- Admin endpoints require `x-admin-token` (`ADMIN_TOKEN` binding).
+- Admin auth primarily uses session cookies (`oaw_admin_session`) with login rate-limiting and optional Telegram 2FA. `x-admin-token` header is accepted when Telegram 2FA is disabled.
 - Tokens and channel configs are stored in D1; validate permissions and quotas.
+- Token quota (`total_quota`) uses raw integer billing units (`1,000,000,000` raw units = $1.00 USD, or `-1` for unlimited).
 - For Azure Responses v1, leave `api_version` empty and set `endpoint` to the resource host.

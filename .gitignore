@@ -34,4 +34,5 @@ public*/
 bun.lock
 *.local.jsonc
 .zcode
-docs/
+# Personal / WIP notes under docs; keep published markdown tracked
+docs/0.next.md
