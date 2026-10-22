@@ -176,8 +176,8 @@ const normalizePricingConfig = (config?: PricingConfig | null): PricingConfig =>
         }
 
         const sanitized = sanitizePricingEntry({
-          model: normalizedModel,
           ...normalizePricingEntry(pricing),
+          model: normalizedModel,
         });
 
         if (!sanitized) {
@@ -551,7 +551,7 @@ export function Pricing() {
           keywords: [channel.key, label, config.type || ""].filter(Boolean),
         } satisfies AutoCompleteOption;
       })
-      .filter((option): option is AutoCompleteOption => option !== null)
+      .filter((option) => option !== null)
       .sort((left, right) => (left.label || left.value).localeCompare(right.label || right.value, "zh-CN"));
   }, [channelsQuery.data]);
 

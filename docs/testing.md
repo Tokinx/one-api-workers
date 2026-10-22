@@ -17,8 +17,11 @@ cd frontend && bun run lint
 
 Notes:
 
-- `bun run build`: builds frontend assets into `public/`
+- `bun run build`: checks Worker, frontend application, and Vite-config types before building frontend assets into `public/`
+- `bun run typecheck`: runs the same type checks without generating frontend assets
 - `cd frontend && bun run lint`: runs frontend ESLint
+
+Run focused regression tests with `bun test tests`. Database regression tests use isolated in-memory SQLite databases and do not modify local or production D1 data.
 
 ## Local E2E
 

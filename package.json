@@ -7,7 +7,9 @@
     "dev": "concurrently --kill-others-on-fail -n web,worker -c cyan,green \"bun run dev:web\" \"bun run dev:worker\"",
     "dev:web": "bun run --filter frontend dev",
     "dev:worker": "wrangler dev --config wrangler.local.jsonc --local --host localhost",
-    "build": "bun run --filter frontend build",
+    "typecheck:worker": "tsc --noEmit",
+    "typecheck": "bun run typecheck:worker && bun run --filter frontend typecheck",
+    "build": "bun run typecheck:worker && bun run --filter frontend build",
     "deploy": "bun run build && wrangler deploy --config wrangler.jsonc",
     "cf-typegen": "wrangler types --config wrangler.jsonc --include-env=false"
   },

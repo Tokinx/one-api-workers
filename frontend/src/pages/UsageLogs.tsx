@@ -10,10 +10,10 @@ import {
 } from "@/types";
 import { PageContainer } from "@/components/ui/page-container";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { useBillingConfig } from "@/hooks/use-billing-config";
@@ -126,23 +126,6 @@ const isSameUsageLogFilterState = (left: UsageLogFilterState, right: UsageLogFil
   );
 };
 
-const ClientSummary = ({ item }: { item: AnalyticsEventItem }) => {
-  const { t } = useTranslation();
-  const locationParts = [item.country, item.region, item.city].filter(Boolean);
-
-  return (
-    <div className="min-w-[190px]">
-      <div className="font-medium">{item.clientIp || "--"}</div>
-      <div className="mt-1 text-xs text-muted-foreground">
-        {locationParts.length > 0 ? locationParts.join(" / ") : t('usageLogs.unknownLocation')}
-      </div>
-      <div className="mt-1 text-xs text-muted-foreground">
-        {item.colo || "--"} {item.timezone ? `· ${item.timezone}` : ""}
-      </div>
-    </div>
-  );
-};
-
 const formatDetailValue = (value: string | number | null | undefined): string => {
   if (value === null || value === undefined) {
     return "--";
@@ -178,7 +161,6 @@ const DetailSection = ({ title, children }: { title: string; children: React.Rea
 const DetailRow = ({
   label,
   value,
-  mono = false,
   tone = "default",
 }: {
   label: string;

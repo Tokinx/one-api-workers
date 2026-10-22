@@ -123,7 +123,7 @@ const buildAdvancedBody = (params: PlaygroundParams) => {
   const body: RequestBodyShape = {}
   for (const key of playgroundParamKeys) {
     const value = params[key]
-    if (value !== undefined && value !== '') {
+    if (value !== undefined) {
       body[key] = value
     }
   }

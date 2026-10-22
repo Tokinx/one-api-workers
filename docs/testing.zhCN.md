@@ -17,8 +17,11 @@ cd frontend && bun run lint
 
 说明：
 
-- `bun run build`：构建前端产物到 `public/`
+- `bun run build`：检查 Worker、前端应用及 Vite 配置的类型，通过后构建前端产物到 `public/`
+- `bun run typecheck`：仅执行上述类型检查，不生成前端产物
 - `cd frontend && bun run lint`：执行前端 ESLint 检查
+
+使用 `bun test tests` 运行专项回归测试。数据库回归测试使用隔离的内存 SQLite，不会修改本地或生产 D1 数据。
 
 ## 本地 E2E
 

@@ -2,9 +2,10 @@ import * as React from 'react'
 import { Check, ChevronDown } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
-type NativeSelectProps = Omit<React.ComponentProps<'select'>, 'children' | 'onChange' | 'size'>
+type TriggerEventProps = Pick<React.ComponentProps<'button'>, 'onBlur' | 'onFocus' | 'onKeyDown'>
+type NativeSelectProps = Omit<React.ComponentProps<'select'>, 'children' | 'onChange' | 'size' | keyof TriggerEventProps>
 
-interface SelectProps extends NativeSelectProps {
+interface SelectProps extends NativeSelectProps, TriggerEventProps {
   children: React.ReactNode
   onChange?: (event: React.ChangeEvent<HTMLSelectElement>) => void
   placeholder?: string
@@ -26,10 +27,10 @@ const CONTENT_BASE_CLASS =
 const ITEM_BASE_CLASS =
   'relative flex w-full select-none items-center px-3 py-2 pr-9 text-left text-sm text-foreground outline-none transition-colors duration-150 hover:bg-muted/80 disabled:cursor-not-allowed disabled:opacity-45'
 
-const isElementOfType = (
+const isElementOfType = <T extends 'option' | 'optgroup'>(
   child: React.ReactNode,
-  type: 'option' | 'optgroup'
-): child is React.ReactElement<React.HTMLAttributes<HTMLElement>> => React.isValidElement(child) && child.type === type
+  type: T
+): child is React.ReactElement<React.ComponentProps<T>> => React.isValidElement(child) && child.type === type
 
 const extractOptions = (children: React.ReactNode): SelectOption[] => {
   const options: SelectOption[] = []
@@ -37,7 +38,7 @@ const extractOptions = (children: React.ReactNode): SelectOption[] => {
   React.Children.forEach(children, (child) => {
     if (!child) return
 
-    if (React.isValidElement(child) && child.type === React.Fragment) {
+    if (React.isValidElement<{ children?: React.ReactNode }>(child) && child.type === React.Fragment) {
       options.push(...extractOptions(child.props.children))
       return
     }

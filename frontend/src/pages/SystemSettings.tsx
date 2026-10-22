@@ -192,9 +192,6 @@ export function SystemSettings() {
     [],
   );
 
-  const currentPrecisionOption = PRECISION_OPTIONS.find(
-    (option) => option.value === normalizedSystemConfig.displayDecimals,
-  );
   const telegramConfigComplete =
     normalizedSystemConfig.adminSecurity.telegramBotToken.trim().length > 0 &&
     normalizedSystemConfig.adminSecurity.telegramChatId.trim().length > 0;
