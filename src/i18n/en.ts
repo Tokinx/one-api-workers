@@ -6,7 +6,7 @@ const en: Record<string, string> = {
     // system
     "system.botTokenRequired": "Bot Token cannot be empty",
     "system.chatIdRequired": "Chat ID cannot be empty",
-    "system.telegramConfigRequired": "Please fill in Bot Token and Chat ID before enabling Telegram verification",
+    "system.telegramConfigRequired": "Please fill in Bot Token and Chat ID and successfully send a test message before enabling Telegram verification",
     "system.configInvalid": "Invalid system configuration",
     "system.telegramConfigInvalid": "Invalid Telegram configuration",
     "system.fillBotTokenAndChatId": "Please fill in a valid Bot Token and Chat ID first",

@@ -6,7 +6,7 @@ const zhCN: Record<string, string> = {
     // system
     "system.botTokenRequired": "Bot Token 不能为空",
     "system.chatIdRequired": "Chat ID 不能为空",
-    "system.telegramConfigRequired": "开启 Telegram 验证前，请先填写 Bot Token 和 Chat ID",
+    "system.telegramConfigRequired": "开启 Telegram 验证前，请先填写 Bot Token 和 Chat ID，并成功发送测试消息",
     "system.configInvalid": "系统设置无效",
     "system.telegramConfigInvalid": "Telegram 配置无效",
     "system.fillBotTokenAndChatId": "请先填写有效的 Bot Token 和 Chat ID",

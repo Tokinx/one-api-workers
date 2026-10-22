@@ -42,9 +42,9 @@ const telegramTestResponseSchema = z.object({
     verifiedAt: z.string(),
 });
 
-const ensureSystemConfigValid = (config: SystemConfig, lang: string) => {
+const ensureSystemConfigValid = (config: SystemConfig, lang: string, telegramEnableRequested: boolean) => {
     if (
-        config.adminSecurity.enabled
+        telegramEnableRequested
         && !isTelegramSecurityEnabled(config.adminSecurity)
     ) {
         throw new Error(t(lang, "system.telegramConfigRequired"));
@@ -94,7 +94,9 @@ export class SystemConfigUpdateEndpoint extends OpenAPIRoute {
         const lang = c.get('lang') || 'zh-CN';
 
         try {
-            ensureSystemConfigValid(config, lang);
+            // Validate the caller's intent before normalization can disable an
+            // unverified configuration. Rejected updates must not reach storage.
+            ensureSystemConfigValid(config, lang, body?.adminSecurity?.enabled === true);
         } catch (error) {
             return c.text(
                 error instanceof Error ? error.message : t(lang, "system.configInvalid"),

@@ -6,7 +6,7 @@ const zhTW: Record<string, string> = {
     // system
     "system.botTokenRequired": "Bot Token 不能為空",
     "system.chatIdRequired": "Chat ID 不能為空",
-    "system.telegramConfigRequired": "開啟 Telegram 驗證前，請先填寫 Bot Token 和 Chat ID",
+    "system.telegramConfigRequired": "開啟 Telegram 驗證前，請先填寫 Bot Token 和 Chat ID，並成功傳送測試訊息",
     "system.configInvalid": "系統設定無效",
     "system.telegramConfigInvalid": "Telegram 配置無效",
     "system.fillBotTokenAndChatId": "請先填寫有效的 Bot Token 和 Chat ID",
