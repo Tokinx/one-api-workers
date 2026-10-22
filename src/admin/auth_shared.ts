@@ -186,47 +186,6 @@ const toRetryAfterSeconds = (retryAfterMs: number): number => {
     return Math.max(1, Math.ceil(retryAfterMs / 1000));
 };
 
-const upsertAdminRateLimit = async (
-    c: Context<HonoCustomType>,
-    row: {
-        attempts: number;
-        blockedUntil: string | null;
-        bucketId: string;
-        bucketKey: string;
-        category: string;
-        lastEventAt: string;
-        windowStartedAt: string;
-    }
-) => {
-    await c.env.DB.prepare(
-        `INSERT INTO admin_rate_limit (
-            bucket_key,
-            category,
-            bucket_id,
-            window_started_at,
-            attempts,
-            blocked_until,
-            last_event_at
-         ) VALUES (?, ?, ?, ?, ?, ?, ?)
-         ON CONFLICT(bucket_key) DO UPDATE SET
-            category = excluded.category,
-            bucket_id = excluded.bucket_id,
-            window_started_at = excluded.window_started_at,
-            attempts = excluded.attempts,
-            blocked_until = excluded.blocked_until,
-            last_event_at = excluded.last_event_at,
-            updated_at = datetime('now')`
-    ).bind(
-        row.bucketKey,
-        row.category,
-        row.bucketId,
-        row.windowStartedAt,
-        row.attempts,
-        row.blockedUntil,
-        row.lastEventAt
-    ).run();
-};
-
 const cleanupExpiredArtifacts = async (c: Context<HonoCustomType>) => {
     // 每次管理员请求都执行三条 DELETE 开销过大，按 isolate 节流到 60s 一次
     const nowMs = Date.now();
@@ -262,67 +221,41 @@ export const consumeAdminRateLimit = async (
     const nowMs = now.getTime();
     const nowIso = now.toISOString();
     const bucketKey = buildAdminRateLimitBucketKey(policy.category, bucketId);
-    const existing = await c.env.DB.prepare(
-        `SELECT
-            bucket_key,
-            category,
-            bucket_id,
-            window_started_at,
-            attempts,
-            blocked_until,
-            last_event_at
-         FROM admin_rate_limit
-         WHERE bucket_key = ?`
-    ).bind(bucketKey).first<StoredAdminRateLimitRow>();
+    // Read, increment and decide whether to block in one SQLite statement.
+    // Every CASE expression reads the row before this update.
+    const blocked = "julianday(blocked_until) > julianday(?4)";
+    const sameWindow = "julianday(window_started_at) > julianday(?5)";
+    const nextAttempts = `CASE WHEN ${sameWindow} THEN COALESCE(attempts, 0) + 1 ELSE 1 END`;
+    const row = await c.env.DB.prepare(
+        `INSERT INTO admin_rate_limit (
+            bucket_key, category, bucket_id, window_started_at,
+            attempts, blocked_until, last_event_at
+         ) VALUES (?1, ?2, ?3, ?4, 1, NULL, ?4)
+         ON CONFLICT(bucket_key) DO UPDATE SET
+            attempts = CASE WHEN ${blocked} THEN attempts ELSE ${nextAttempts} END,
+            window_started_at = CASE
+                WHEN ${blocked} OR ${sameWindow} THEN window_started_at ELSE ?4 END,
+            blocked_until = CASE
+                WHEN ${blocked} THEN blocked_until
+                WHEN (${nextAttempts}) > ?6 THEN ?7 ELSE NULL END,
+            last_event_at = CASE WHEN ${blocked} THEN last_event_at ELSE ?4 END,
+            updated_at = datetime('now')
+         RETURNING attempts, blocked_until`
+    ).bind(
+        bucketKey, policy.category, bucketId, nowIso,
+        new Date(nowMs - policy.windowMs).toISOString(), policy.maxAttempts,
+        new Date(nowMs + policy.blockDurationMs).toISOString()
+    ).first<Pick<StoredAdminRateLimitRow, "attempts" | "blocked_until">>();
 
-    const blockedUntilMs = existing?.blocked_until ? Date.parse(existing.blocked_until) : Number.NaN;
-    if (existing?.blocked_until && Number.isFinite(blockedUntilMs) && blockedUntilMs > nowMs) {
+    if (!row) throw new Error("Failed to consume admin rate limit");
+    const blockedUntilMs = row.blocked_until ? Date.parse(row.blocked_until) : Number.NaN;
+    if (Number.isFinite(blockedUntilMs) && blockedUntilMs > nowMs) {
         return {
             ok: false,
             message: policy.message,
             retryAfterSeconds: toRetryAfterSeconds(blockedUntilMs - nowMs),
         };
     }
-
-    const windowStartedAtMs = existing?.window_started_at
-        ? Date.parse(existing.window_started_at)
-        : Number.NaN;
-    const isSameWindow = Number.isFinite(windowStartedAtMs)
-        && nowMs - windowStartedAtMs < policy.windowMs;
-    const windowStartedAt = isSameWindow && existing?.window_started_at
-        ? existing.window_started_at
-        : nowIso;
-    const previousAttempts = isSameWindow ? existing?.attempts || 0 : 0;
-    const nextAttempts = previousAttempts + 1;
-
-    if (nextAttempts > policy.maxAttempts) {
-        const blockedUntil = new Date(nowMs + policy.blockDurationMs).toISOString();
-        await upsertAdminRateLimit(c, {
-            attempts: nextAttempts,
-            blockedUntil,
-            bucketId,
-            bucketKey,
-            category: policy.category,
-            lastEventAt: nowIso,
-            windowStartedAt,
-        });
-
-        return {
-            ok: false,
-            message: policy.message,
-            retryAfterSeconds: toRetryAfterSeconds(policy.blockDurationMs),
-        };
-    }
-
-    await upsertAdminRateLimit(c, {
-        attempts: nextAttempts,
-        blockedUntil: null,
-        bucketId,
-        bucketKey,
-        category: policy.category,
-        lastEventAt: nowIso,
-        windowStartedAt,
-    });
 
     return { ok: true };
 };
@@ -590,76 +523,53 @@ export const verifyAdminLoginChallenge = async (
 }> => {
     await cleanupExpiredArtifacts(c);
 
-    const challenge = await c.env.DB.prepare(
-        `SELECT * FROM admin_login_challenge WHERE id = ?`
-    ).bind(challengeId).first<AdminLoginChallengeRow>();
-
-    if (!challenge?.id) {
-        return {
-            ok: false,
-            reason: "验证码已失效，请重新获取",
-        };
-    }
-
     const metadata = getRequestMetadata(c);
-    if (
-        challenge.request_ip
-        && metadata.clientIp
-        && challenge.request_ip !== metadata.clientIp
-    ) {
-        await deleteAdminLoginChallenge(c, challengeId);
-        return {
-            ok: false,
-            reason: "登录来源已变化，请重新获取验证码",
-        };
-    }
-
-    if (Date.parse(challenge.expires_at) <= Date.now()) {
-        await deleteAdminLoginChallenge(c, challengeId);
-        return {
-            ok: false,
-            reason: "验证码已过期，请重新获取",
-        };
-    }
-
-    if ((challenge.attempts || 0) >= (challenge.max_attempts || ADMIN_LOGIN_CHALLENGE_MAX_ATTEMPTS)) {
-        await deleteAdminLoginChallenge(c, challengeId);
-        return {
-            ok: false,
-            reason: "验证码尝试次数过多，请重新获取",
-        };
-    }
-
+    const now = new Date().toISOString();
     const codeHash = await toSha256Hex(code);
-
-    if (codeHash !== challenge.code_hash) {
-        const nextAttempts = (challenge.attempts || 0) + 1;
-
-        if (nextAttempts >= (challenge.max_attempts || ADMIN_LOGIN_CHALLENGE_MAX_ATTEMPTS)) {
-            await deleteAdminLoginChallenge(c, challengeId);
-            return {
-                ok: false,
-                reason: "验证码错误，已达到最大尝试次数",
-            };
-        }
-
-        await c.env.DB.prepare(
+    const maxAttempts = `COALESCE(NULLIF(max_attempts, 0), ${ADMIN_LOGIN_CHALLENGE_MAX_ATTEMPTS})`;
+    // D1 batch is transactional: no other attempt can interleave between the
+    // increment and the conditional consume. Only the DELETE winner can log in.
+    const [attemptResult, consumeResult] = await c.env.DB.batch<AdminLoginChallengeRow>([
+        c.env.DB.prepare(
             `UPDATE admin_login_challenge
-             SET attempts = ?, updated_at = datetime('now')
-             WHERE id = ?`
-        ).bind(nextAttempts, challengeId).run();
-
+             SET attempts = COALESCE(attempts, 0) + 1, updated_at = datetime('now')
+             WHERE id = ?1 AND code_hash <> ?2
+               AND julianday(expires_at) > julianday(?3)
+               AND COALESCE(attempts, 0) < ${maxAttempts}
+               AND (COALESCE(request_ip, '') = '' OR ?4 = '' OR request_ip = ?4)
+             RETURNING *`
+        ).bind(challengeId, codeHash, now, metadata.clientIp),
+        c.env.DB.prepare(
+            `DELETE FROM admin_login_challenge
+             WHERE id = ?1 AND (
+                code_hash = ?2
+                OR COALESCE(attempts, 0) >= ${maxAttempts}
+                OR COALESCE(julianday(expires_at), 0) <= julianday(?3)
+                OR (COALESCE(request_ip, '') <> '' AND ?4 <> '' AND request_ip <> ?4)
+             )
+             RETURNING *`
+        ).bind(challengeId, codeHash, now, metadata.clientIp),
+    ]);
+    const attempted = attemptResult.results[0];
+    const consumed = consumeResult.results[0];
+    if (!consumed) {
+        return { ok: false, reason: attempted ? "验证码错误" : "验证码已失效，请重新获取" };
+    }
+    if (consumed.request_ip && metadata.clientIp && consumed.request_ip !== metadata.clientIp) {
+        return { ok: false, reason: "登录来源已变化，请重新获取验证码" };
+    }
+    const expiresAtMs = Date.parse(consumed.expires_at);
+    if (!Number.isFinite(expiresAtMs) || expiresAtMs <= Date.parse(now)) {
+        return { ok: false, reason: "验证码已过期，请重新获取" };
+    }
+    if ((consumed.attempts || 0) >= (consumed.max_attempts || ADMIN_LOGIN_CHALLENGE_MAX_ATTEMPTS)) {
         return {
             ok: false,
-            reason: "验证码错误",
+            reason: attempted ? "验证码错误，已达到最大尝试次数" : "验证码尝试次数过多，请重新获取",
         };
     }
+    return { ok: consumed.code_hash === codeHash };
 
-    await deleteAdminLoginChallenge(c, challengeId);
-
-    return {
-        ok: true,
-    };
 };
 
 export const sendAdminLoginCodeNotification = async (

@@ -7,6 +7,11 @@ export function createTestDatabase() {
     const sqlite = new Database(":memory:");
     const prepare = (sql: string, params: SQLQueryBindings[] = []) => ({
         bind: (...values: SQLQueryBindings[]) => prepare(sql, values),
+        execute() {
+            const results = sqlite.query(sql).all(...params);
+            const changes = sqlite.query("SELECT changes() AS count").get() as { count: number };
+            return { success: true, results, meta: { changes: changes.count } };
+        },
         async first(column?: string) {
             const row = sqlite.query(sql).get(...params) as Record<string, unknown> | null;
             return column ? row?.[column] ?? null : row;
@@ -23,16 +28,8 @@ export function createTestDatabase() {
         prepare,
         async exec(sql: string) { sqlite.exec(sql); },
         async batch(statements: ReturnType<typeof prepare>[]) {
-            sqlite.exec("BEGIN");
-            try {
-                const results = [];
-                for (const statement of statements) results.push(await statement.run());
-                sqlite.exec("COMMIT");
-                return results;
-            } catch (error) {
-                sqlite.exec("ROLLBACK");
-                throw error;
-            }
+            // Match D1: the whole batch runs without another caller interleaving.
+            return sqlite.transaction(() => statements.map(statement => statement.execute()))();
         },
     };
     const context = new Context<HonoCustomType>(new Request("http://localhost/"), {

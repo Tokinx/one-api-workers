@@ -21,7 +21,7 @@ cd frontend && bun run lint
 - `bun run typecheck`：仅执行上述类型检查，不生成前端产物
 - `cd frontend && bun run lint`：执行前端 ESLint 检查
 
-使用 `bun test tests` 运行专项回归测试。数据库回归测试使用隔离的内存 SQLite，不会修改本地或生产 D1 数据。
+使用 `bun test tests` 运行专项回归测试。数据库回归测试使用隔离的内存 SQLite 和本地 D1 绑定（`getPlatformProxy` 关闭持久化和远程绑定），不会修改已有的本地或生产 D1 数据。`tests/local-d1.test.ts` 在实际本地 D1 运行时中验证迁移与认证并发。
 
 ## 本地 E2E
 
