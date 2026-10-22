@@ -238,7 +238,10 @@ const migrateApiTokenUsagePrecision = async (c: Context<HonoCustomType>) => {
                 const tokenData = JSON.parse(row.value) as ApiTokenData;
                 migratedValue = JSON.stringify({
                     ...tokenData,
-                    total_quota: legacyBillingAmountToRaw(tokenData.total_quota),
+                    // -1 是无限配额标记，不参与金额单位换算。
+                    total_quota: Number(tokenData.total_quota) === -1
+                        ? -1
+                        : legacyBillingAmountToRaw(tokenData.total_quota),
                 });
             } catch (error) {
                 console.error(`Failed to migrate token config for ${row.key}:`, error);
