@@ -56,7 +56,7 @@ export default {
 
             const [streamForClient, streamForServer] = response.body.tee()
             c.executionCtx.waitUntil(
-                handleStreamResponse(c, streamForServer, saveUsage).catch((error) => {
+                handleStreamResponse(c, streamForServer, requestBody, saveUsage).catch((error) => {
                     console.warn("Failed to track usage from upstream stream:", error)
                 })
             )

@@ -310,6 +310,8 @@ Field notes:
 - `channel_keys`: allowed channels; empty array means all channels
 - `total_quota`: total quota stored internally in raw billing units (`1,000,000,000` raw units = $1.00 USD, or `-1` for unlimited). When configuring in the web UI, enter amounts in USD (e.g. `$1.00`), and the system will automatically convert to raw units
 
+Chat Completions streams use upstream `usage` when a complete summary is available. Otherwise, usage is estimated from the request body and received output at approximately four UTF-8 bytes per token, including text, reasoning text, and tool calls. Received content is also settled if stream reading fails. This fallback cannot reproduce model tokenization or accurately measure image and audio usage.
+
 ## Monitoring and Security
 
 ### Monitoring and stats

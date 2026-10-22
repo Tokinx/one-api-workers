@@ -1,4 +1,5 @@
 import { Context } from "hono"
+import { estimateTokensFromText } from "./usage-utils"
 
 const AUDIO_OUTPUT_TOKENS_PER_MINUTE = 1250
 const TEXT_TOKENS_PER_CHAR = 0.25
@@ -80,25 +81,62 @@ export const checkoutUsageData = async (
     }
 }
 
+type ChatStreamUsageState = {
+    saved: boolean
+    observedCompletion: boolean
+    outputBytes: number
+}
+
+type ChatStreamChunk = OpenAIResponse & {
+    choices?: Array<{
+        delta?: {
+            content?: string
+            reasoning_content?: string
+            refusal?: string
+            function_call?: { name?: string; arguments?: string }
+            tool_calls?: Array<{ function?: { name?: string; arguments?: string } }>
+        }
+    }>
+}
+
+const encoder = new TextEncoder()
+
 export const processStreamData = async (
     lines: string[],
-    usageSaved: { value: boolean },
+    state: ChatStreamUsageState,
     saveUsage: (usage: Usage) => Promise<void>
 ): Promise<void> => {
-    if (usageSaved.value) return
+    if (state.saved) return
     const processedLines = lines
         .map(line => line.trim())
         .filter(line => line.length > 0 && line.startsWith('data:'))
-        .map(line => line.replace('data: ', '').trim())
+        .map(line => line.slice('data:'.length).trim())
         .filter(line => line !== '[DONE]')
 
     for (const jsonContent of processedLines) {
+        if (state.saved) break
         try {
-            const res = JSON.parse(jsonContent) as OpenAIResponse
-            if (!res.usage) continue
-            await saveUsage(res.usage)
-            usageSaved.value = true
-            break
+            const res = JSON.parse(jsonContent) as ChatStreamChunk
+            if (!res || typeof res !== "object") continue
+            if (Array.isArray(res.choices) && res.choices.length > 0) {
+                state.observedCompletion = true
+                for (const choice of res.choices) {
+                    const delta = choice?.delta
+                    const functions = [delta?.function_call, ...(delta?.tool_calls || []).map(tool => tool.function)]
+                    const parts = [delta?.content, delta?.reasoning_content, delta?.refusal,
+                        ...functions.flatMap(fn => [fn?.name, fn?.arguments])]
+                    for (const part of parts) {
+                        if (typeof part === "string") state.outputBytes += encoder.encode(part).length
+                    }
+                }
+            }
+            // Only a complete numeric usage summary can replace the estimate.
+            if (typeof res.usage?.prompt_tokens === "number" && Number.isFinite(res.usage.prompt_tokens)
+                && typeof res.usage.completion_tokens === "number" && Number.isFinite(res.usage.completion_tokens)) {
+                state.saved = true
+                await saveUsage(res.usage)
+                break
+            }
         } catch (e) {
             console.error("Error parsing stream data:", e)
         }
@@ -106,19 +144,20 @@ export const processStreamData = async (
 }
 
 export const handleStreamResponse = async (
-    c: Context<HonoCustomType>,
-    streamForServer: ReadableStream<any> | undefined,
+    _c: Context<HonoCustomType>,
+    streamForServer: ReadableStream<Uint8Array> | undefined,
+    requestBody: unknown,
     saveUsage: (usage: Usage) => Promise<void>
 ): Promise<void> => {
+    const state: ChatStreamUsageState = { saved: false, observedCompletion: false, outputBytes: 0 }
+    const reader = streamForServer?.getReader()
+    const decoder = new TextDecoder('utf-8')
+    let buffer = ""
     try {
-        const reader = streamForServer?.getReader()
         if (!reader) {
             throw new Error("No reader found in response body")
         }
 
-        const decoder = new TextDecoder('utf-8')
-        let buffer = ""
-        const usageSaved = { value: false }
         while (true) {
             const { done, value } = await reader.read()
             if (done) break
@@ -131,14 +170,26 @@ export const handleStreamResponse = async (
             const lines = buffer.split('\n')
             buffer = lines.pop() || ""
 
-            await processStreamData(lines, usageSaved, saveUsage)
-        }
-
-        if (buffer.trim()) {
-            await processStreamData([buffer], usageSaved, saveUsage)
+            await processStreamData(lines, state, saveUsage)
         }
     } catch (error) {
         // 上游关闭或客户端断开都会让 tee 分支读取失败，属预期情况
         console.warn("Stream processing interrupted (upstream closed or client disconnected):", error)
+    } finally {
+        reader?.releaseLock()
+        buffer += decoder.decode()
+        if (buffer.trim()) await processStreamData([buffer], state, saveUsage)
+        if (!state.saved && state.observedCompletion) {
+            // Match the existing Responses estimate (UTF-8 bytes / 4), without
+            // retaining generated text. Also settle partial output on read errors.
+            const promptTokens = estimateTokensFromText(JSON.stringify(requestBody) || "")
+            const completionTokens = Math.ceil(state.outputBytes / 4)
+            state.saved = true
+            await saveUsage({
+                prompt_tokens: promptTokens,
+                completion_tokens: completionTokens,
+                total_tokens: promptTokens + completionTokens,
+            })
+        }
     }
 }
