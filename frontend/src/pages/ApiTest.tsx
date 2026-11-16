@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
+import { Button, type ButtonProps } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Select } from '@/components/ui/select'
@@ -11,8 +11,26 @@ import { useToast } from '@/components/ui/use-toast'
 import { apiClient } from '@/api/client'
 import { Channel, Token } from '@/types'
 import { AutoCompleteInput, type AutoCompleteOption } from '@/components/ui/autocomplete'
-import { Bot, CheckCircle, ChevronDown, ChevronRight, Clock, Code2, Copy, Edit3, RefreshCw, Save, Send, Square, User, X } from 'lucide-react'
+import {
+  Bot,
+  Check,
+  CheckCircle,
+  ChevronDown,
+  ChevronRight,
+  Clock,
+  Code2,
+  Copy,
+  Edit3,
+  RefreshCw,
+  RotateCcw,
+  Send,
+  Square,
+  Trash2,
+  User,
+  X,
+} from 'lucide-react'
 import { PageContainer } from '@/components/ui/page-container'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn, copyToClipboard } from '@/lib/utils'
 import {
   channelSupportsModel,
@@ -170,11 +188,54 @@ const parseAssistantContent = (endpoint: ChatEndpoint, result: unknown): string 
   return JSON.stringify(result, null, 2)
 }
 
+type IconActionButtonProps = Omit<ButtonProps, 'size' | 'aria-label'> & {
+  label: string
+  tooltip?: string
+}
+
+/** Compact icon-only button paired with a tooltip and accessible label. */
+function IconActionButton({
+  label,
+  tooltip,
+  className,
+  type = 'button',
+  variant = 'ghost',
+  children,
+  ...props
+}: IconActionButtonProps) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          type={type}
+          variant={variant}
+          size="icon"
+          aria-label={label}
+          className={cn('h-7 w-7 [&_svg]:size-3.5 focus-visible:ring-2 focus-visible:ring-primary/30', className)}
+          {...props}
+        >
+          {children}
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent side="top">{tooltip || label}</TooltipContent>
+    </Tooltip>
+  )
+}
+
 export function ApiTest() {
   const { t } = useTranslation()
   const { addToast } = useToast()
   const abortControllerRef = useRef<AbortController | null>(null)
   const messageListRef = useRef<HTMLDivElement | null>(null)
+  const copyTimerRef = useRef<number | null>(null)
+  const lastCopyAnnouncementRef = useRef('')
+
+  const baseId = useId()
+  const tokenInputId = `${baseId}-token`
+  const modelInputId = `${baseId}-model`
+  const channelInputId = `${baseId}-channel`
+  const endpointSelectId = `${baseId}-endpoint`
+  const streamSwitchId = `${baseId}-stream`
 
   const [endpoint, setEndpoint] = useState<ChatEndpoint>('/v1/chat/completions')
   const [apiToken, setApiToken] = useState('')
@@ -188,6 +249,8 @@ export function ApiTest() {
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null)
   const [editingContent, setEditingContent] = useState('')
   const [rawResponseMessage, setRawResponseMessage] = useState<PlaygroundMessage | null>(null)
+  const [copiedTarget, setCopiedTarget] = useState<string | null>(null)
+  const [copyAnnouncement, setCopyAnnouncement] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [responseTime, setResponseTime] = useState<number>(0)
   const [statusCode, setStatusCode] = useState<number | null>(null)
@@ -197,6 +260,9 @@ export function ApiTest() {
   useEffect(() => {
     return () => {
       abortControllerRef.current?.abort()
+      if (copyTimerRef.current !== null) {
+        window.clearTimeout(copyTimerRef.current)
+      }
     }
   }, [])
 
@@ -636,291 +702,520 @@ export function ApiTest() {
     void sendConversation({ baseMessages, userMessage })
   }
 
-  const handleCopyMessages = async () => {
+  const copyWithFeedback = async (targetId: string, text: string) => {
+    if (!text) {
+      return
+    }
+
     try {
-      await copyToClipboard(JSON.stringify(messages, null, 2))
+      await copyToClipboard(text)
+      if (copyTimerRef.current !== null) {
+        window.clearTimeout(copyTimerRef.current)
+      }
+      setCopiedTarget(targetId)
+      const baseAnnouncement = t('apiTest.copied')
+      const nextAnnouncement = lastCopyAnnouncementRef.current === baseAnnouncement
+        ? `${baseAnnouncement}\u00A0`
+        : baseAnnouncement
+      lastCopyAnnouncementRef.current = nextAnnouncement
+      setCopyAnnouncement(nextAnnouncement)
+      copyTimerRef.current = window.setTimeout(() => {
+        setCopiedTarget(null)
+        setCopyAnnouncement('')
+      }, 1800)
       addToast(t('common.copiedToClipboard'), 'success')
     } catch {
       addToast(t('common.copyFailed'), 'error')
     }
+  }
+
+  const handleResetParams = () => {
+    setPlaygroundParams(initialParams)
+    setRequestBody(buildAdvancedBody(initialParams))
+  }
+
+  const handleClearConversation = () => {
+    if (isLoading) {
+      return
+    }
+    setMessages([])
+    setEditingMessageId(null)
+    setEditingContent('')
+    setRawResponseMessage(null)
+    setStatusCode(null)
+    setResponseTime(0)
+  }
+
+  const handleCopyMessages = () => {
+    void copyWithFeedback('conversation', JSON.stringify(messages, null, 2))
   }
 
   const rawResponseContent = rawResponseMessage
     ? rawResponseMessage.rawResponseText || stringifyRawResponse(rawResponseMessage.rawResponse)
     : ''
 
-  const handleCopyRawResponse = async () => {
-    if (!rawResponseContent) {
-      return
-    }
-
-    try {
-      await copyToClipboard(rawResponseContent)
-      addToast(t('common.copiedToClipboard'), 'success')
-    } catch {
-      addToast(t('common.copyFailed'), 'error')
-    }
+  const handleCopyRawResponse = () => {
+    void copyWithFeedback('raw-response', rawResponseContent)
   }
+
+  const streamParam = visibleParamDefinitions.find((param) => param.type === 'boolean')
+  const numericParams = visibleParamDefinitions.filter((param) => param.type === 'number')
 
   return (
     <PageContainer
       title={t('apiTest.title')}
       description={t('apiTest.description')}
     >
-      <Dialog open={!!rawResponseMessage} onOpenChange={(open) => !open && setRawResponseMessage(null)}>
-        <DialogContent className="max-w-4xl">
-          <DialogHeader>
-            <DialogTitle>{t('apiTest.rawResponse')}</DialogTitle>
-          </DialogHeader>
-          <pre className="max-h-[70vh] overflow-auto rounded-lg bg-muted/50 p-4 text-sm font-mono whitespace-pre-wrap break-words scrollbar-thin">
-            {rawResponseContent}
-          </pre>
-          <div className="flex justify-end">
-            <Button type="button" variant="outline" onClick={handleCopyRawResponse}>
-              <Copy className="h-4 w-4" />
-              {t('common.copy')}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <TooltipProvider delayDuration={150}>
+        <span className="sr-only" role="status" aria-live="polite">
+          {copyAnnouncement}
+        </span>
 
-      <div className="grid grid-cols-1 xl:grid-cols-[360px_minmax(0,1fr)] gap-4 min-h-[calc(100vh-12rem)]">
-        <Card>
-          <CardContent className="p-5 space-y-5">
-            <div className="flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full bg-primary" />
-              <h3 className="font-semibold text-sm">{t('apiTest.playgroundParams')}</h3>
+        <Dialog open={!!rawResponseMessage} onOpenChange={(open) => !open && setRawResponseMessage(null)}>
+          <DialogContent className="max-w-4xl">
+            <DialogHeader>
+              <DialogTitle>{t('apiTest.rawResponse')}</DialogTitle>
+            </DialogHeader>
+            <div className="relative">
+              <IconActionButton
+                label={t('common.copy')}
+                tooltip={copiedTarget === 'raw-response' ? t('apiTest.copied') : t('common.copy')}
+                variant="outline"
+                className="absolute right-2.5 top-2.5 z-10 bg-card/90 backdrop-blur-sm"
+                onClick={handleCopyRawResponse}
+              >
+                {copiedTarget === 'raw-response' ? (
+                  <Check aria-hidden="true" className="text-emerald-500" />
+                ) : (
+                  <Copy aria-hidden="true" />
+                )}
+              </IconActionButton>
+              <pre className="max-h-[70vh] overflow-auto rounded-lg bg-muted/50 p-4 pr-12 text-xs font-mono whitespace-pre-wrap break-words scrollbar-thin">
+                {rawResponseContent}
+              </pre>
             </div>
+          </DialogContent>
+        </Dialog>
 
-            <div className="space-y-2">
-              <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{t('apiTest.apiToken')}</Label>
-              <AutoCompleteInput
-                value={apiToken}
-                onChange={handleTokenChange}
-                placeholder="sk-..."
-                inputClassName="font-mono"
-                options={tokenOptions}
-                emptyText={t('apiTest.noMatchingTokens')}
-              />
-            </div>
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-[320px_minmax(0,1fr)] items-start">
+          <Card>
+            <CardContent className="p-4 space-y-3.5">
+              <div className="flex items-center justify-between gap-2">
+                <h2 className="text-xs font-semibold text-foreground">{t('apiTest.playgroundParams')}</h2>
+                <IconActionButton
+                  label={t('apiTest.resetParams')}
+                  className="h-6 w-6 text-muted-foreground hover:text-foreground"
+                  onClick={handleResetParams}
+                  disabled={isLoading}
+                >
+                  <RotateCcw aria-hidden="true" />
+                </IconActionButton>
+              </div>
 
-            <div className="space-y-2">
-              <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{t('apiTest.model')}</Label>
-              <AutoCompleteInput
-                value={modelValue}
-                onChange={handleModelChange}
-                placeholder={apiToken ? t('apiTest.modelPlaceholder') : t('apiTest.selectTokenFirst')}
-                inputClassName="font-mono"
-                options={modelOptions}
-                maxOptions={availableModelNames.length}
-                emptyText={apiToken ? t('apiTest.noMatchingModels') : t('apiTest.selectTokenFirst')}
-                disabled={!apiToken}
-              />
-            </div>
+              <div className="space-y-2.5">
+                <div className="space-y-1">
+                  <Label htmlFor={tokenInputId} className="text-xs font-medium text-muted-foreground">
+                    {t('apiTest.apiToken')}
+                  </Label>
+                  <AutoCompleteInput
+                    id={tokenInputId}
+                    value={apiToken}
+                    onChange={handleTokenChange}
+                    placeholder="sk-..."
+                    inputClassName="h-9 font-mono text-xs"
+                    options={tokenOptions}
+                    emptyText={t('apiTest.noMatchingTokens')}
+                  />
+                </div>
 
-            <div className="space-y-2">
-              <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{t('apiTest.channel')}</Label>
-              <AutoCompleteInput
-                value={channelKey}
-                onChange={handleChannelChange}
-                placeholder={apiToken ? t('apiTest.autoChannel') : t('apiTest.selectTokenFirst')}
-                inputClassName="font-mono"
-                options={channelOptions}
-                maxOptions={availableChannels.length}
-                emptyText={apiToken ? t('apiTest.noMatchingChannels') : t('apiTest.selectTokenFirst')}
-                disabled={!apiToken}
-              />
-            </div>
+                <div className="space-y-1">
+                  <Label htmlFor={modelInputId} className="text-xs font-medium text-muted-foreground">
+                    {t('apiTest.model')}
+                  </Label>
+                  <AutoCompleteInput
+                    id={modelInputId}
+                    value={modelValue}
+                    onChange={handleModelChange}
+                    placeholder={apiToken ? t('apiTest.modelPlaceholder') : t('apiTest.selectTokenFirst')}
+                    inputClassName="h-9 font-mono text-xs"
+                    options={modelOptions}
+                    maxOptions={availableModelNames.length}
+                    emptyText={apiToken ? t('apiTest.noMatchingModels') : t('apiTest.selectTokenFirst')}
+                    disabled={!apiToken}
+                  />
+                </div>
 
-            <div className="space-y-2">
-              <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{t('apiTest.endpoint')}</Label>
-              <Select value={endpoint} onChange={(event) => setEndpoint(event.target.value as ChatEndpoint)}>
-                {chatEndpoints.map((item) => (
-                  <option key={item} value={item}>{item}</option>
-                ))}
-              </Select>
-            </div>
+                <div className="space-y-1">
+                  <Label htmlFor={channelInputId} className="text-xs font-medium text-muted-foreground">
+                    {t('apiTest.channel')}
+                  </Label>
+                  <AutoCompleteInput
+                    id={channelInputId}
+                    value={channelKey}
+                    onChange={handleChannelChange}
+                    placeholder={apiToken ? t('apiTest.autoChannel') : t('apiTest.selectTokenFirst')}
+                    inputClassName="h-9 font-mono text-xs"
+                    options={channelOptions}
+                    maxOptions={availableChannels.length}
+                    emptyText={apiToken ? t('apiTest.noMatchingChannels') : t('apiTest.selectTokenFirst')}
+                    disabled={!apiToken}
+                  />
+                </div>
 
-            <div className="space-y-3 rounded-lg border border-border/60 bg-muted/20 p-4">
-              <div className="grid grid-cols-1 gap-3">
-                {visibleParamDefinitions.map((param) => (
-                  <div key={param.key} className="space-y-2">
-                    <Label className="text-xs text-muted-foreground">{t(param.translationKey)}</Label>
-                    {param.type === 'boolean' ? (
-                      <div className="flex h-10 items-center justify-between rounded-md border border-input bg-card px-3">
-                        <span className="text-sm">{playgroundParams[param.key] === true ? t('common.enabled') : t('common.disabled')}</span>
-                        <Switch
-                          checked={playgroundParams[param.key] === true}
-                          onCheckedChange={(checked) => applyParamToRequestBody(param.key, checked)}
+                <div className="space-y-1">
+                  <Label htmlFor={endpointSelectId} className="text-xs font-medium text-muted-foreground">
+                    {t('apiTest.endpoint')}
+                  </Label>
+                  <Select
+                    id={endpointSelectId}
+                    value={endpoint}
+                    className="h-9 font-mono text-xs"
+                    onChange={(event) => setEndpoint(event.target.value as ChatEndpoint)}
+                  >
+                    {chatEndpoints.map((item) => (
+                      <option key={item} value={item}>{item}</option>
+                    ))}
+                  </Select>
+                </div>
+              </div>
+
+              <div className="space-y-2.5 border-t pt-3">
+                {streamParam && (
+                  <div className="flex items-center justify-between py-0.5">
+                    <Label htmlFor={streamSwitchId} className="text-xs font-medium text-muted-foreground">
+                      {t(streamParam.translationKey)}
+                    </Label>
+                    <Switch
+                      id={streamSwitchId}
+                      checked={playgroundParams[streamParam.key] === true}
+                      onCheckedChange={(checked) => applyParamToRequestBody(streamParam.key, checked)}
+                    />
+                  </div>
+                )}
+
+                <div className="grid grid-cols-2 gap-2">
+                  {numericParams.map((param) => {
+                    const paramId = `${baseId}-${param.key}`
+                    return (
+                      <div key={param.key} className="space-y-1">
+                        <Label htmlFor={paramId} className="text-[11px] text-muted-foreground">
+                          {t(param.translationKey)}
+                        </Label>
+                        <Input
+                          id={paramId}
+                          type="number"
+                          min={param.min}
+                          max={param.max}
+                          step={param.step}
+                          value={typeof playgroundParams[param.key] === 'number' ? String(playgroundParams[param.key]) : ''}
+                          onChange={(event) => handleNumberParamChange(param.key, event.target.value)}
+                          className="h-8 px-2.5 text-xs font-mono"
                         />
                       </div>
-                    ) : (
-                      <Input
-                        type="number"
-                        min={param.min}
-                        max={param.max}
-                        step={param.step}
-                        value={typeof playgroundParams[param.key] === 'number' ? String(playgroundParams[param.key]) : ''}
-                        onChange={(event) => handleNumberParamChange(param.key, event.target.value)}
-                        className="font-mono"
-                      />
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="space-y-2 rounded-lg border border-border/60 p-3">
-              <button
-                type="button"
-                className="flex w-full items-center justify-between text-left text-sm font-medium"
-                onClick={() => setRequestBodyOpen((open) => !open)}
-              >
-                <span>{t('apiTest.requestBody')}</span>
-                {requestBodyOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-              </button>
-              {requestBodyOpen && (
-                <Textarea
-                  value={requestBody}
-                  onChange={(event) => handleRequestBodyChange(event.target.value)}
-                  rows={10}
-                  className="font-mono text-sm"
-                />
-              )}
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="min-h-[640px]">
-          <CardContent className="flex h-full min-h-[640px] flex-col p-0">
-            <div className="flex items-center justify-between border-b p-4">
-              <div className="flex items-center gap-2">
-                <Bot className="h-4 w-4 text-primary" />
-                <h3 className="font-semibold text-sm">{t('apiTest.conversation')}</h3>
-              </div>
-              <div className="flex items-center gap-2">
-                {statusCode && (
-                  <>
-                    <Badge variant={statusCode === 200 ? 'success' : 'destructive'} className="text-xs">
-                      {statusCode === 200 ? <CheckCircle className="h-3 w-3 mr-1" /> : <X className="h-3 w-3 mr-1" />}
-                      {statusCode}
-                    </Badge>
-                    <Badge variant="outline" className="text-xs font-mono">
-                      <Clock className="h-3 w-3 mr-1" />
-                      {responseTime}ms
-                    </Badge>
-                  </>
-                )}
-                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleCopyMessages} title={t('apiTest.copyResponse')}>
-                  <Copy className="h-3.5 w-3.5" />
-                </Button>
-              </div>
-            </div>
-
-            <div ref={messageListRef} className="flex-1 space-y-4 overflow-y-auto p-5 scrollbar-thin">
-              {messages.length === 0 ? (
-                <div className="flex h-full min-h-[360px] flex-col items-center justify-center text-center text-muted-foreground/50">
-                  <Bot className="mb-3 h-12 w-12" />
-                  <p className="text-sm">{t('apiTest.conversationEmpty')}</p>
+                    )
+                  })}
                 </div>
-              ) : (
-                messages.map((message) => {
-                  const isUser = message.role === 'user'
-                  const isEditing = editingMessageId === message.id
+              </div>
 
-                  return (
-                    <div key={message.id} className={cn('flex', isUser ? 'justify-end' : 'justify-start')}>
-                      <div className={cn('max-w-[84%] space-y-2 rounded-2xl border p-3', isUser ? 'bg-primary text-primary-foreground' : 'bg-muted/60')}>
-                        <div className="flex items-center justify-between gap-3 text-xs opacity-80">
-                          <div className="flex items-center gap-2">
-                            {isUser ? <User className="h-3.5 w-3.5" /> : <Bot className="h-3.5 w-3.5" />}
-                            <span>{isUser ? t('apiTest.user') : t('apiTest.assistant')}</span>
-                            {message.status === 'streaming' && <Badge variant="outline" className="text-[10px]">{t('apiTest.streaming')}</Badge>}
-                            {message.status === 'error' && <Badge variant="destructive" className="text-[10px]">{t('apiTest.responseFailed')}</Badge>}
-                          </div>
-                          <div className="flex items-center gap-1">
-                            {message.model && <span className="font-mono">{message.model}</span>}
-                            {message.channelKey && <span className="font-mono">@{message.channelKey}</span>}
-                          </div>
-                        </div>
-
-                        {isEditing ? (
-                          <div className="space-y-2">
-                            <Textarea value={editingContent} onChange={(event) => setEditingContent(event.target.value)} rows={4} />
-                            <div className="flex justify-end gap-2">
-                              <Button type="button" variant="outline" size="sm" onClick={() => setEditingMessageId(null)}>
-                                <X className="h-3.5 w-3.5" />
-                                {t('common.cancel')}
-                              </Button>
-                              <Button type="button" size="sm" onClick={saveEditedMessage}>
-                                <Save className="h-3.5 w-3.5" />
-                                {t('common.save')}
-                              </Button>
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="whitespace-pre-wrap break-words text-sm leading-relaxed">{message.content || (message.status === 'streaming' ? t('apiTest.streaming') : '')}</div>
-                        )}
-
-                        {!isEditing && (
-                          <div className={cn('flex flex-wrap gap-2', isUser ? 'justify-end' : 'justify-start')}>
-                            {isUser && (
-                              <Button type="button" variant="ghost" size="sm" className="h-7 px-2" onClick={() => startEditingMessage(message)} disabled={isLoading}>
-                                <Edit3 className="h-3.5 w-3.5" />
-                                {t('apiTest.editMessage')}
-                              </Button>
-                            )}
-                            {!isUser && (message.rawResponse || message.rawResponseText) && (
-                              <Button type="button" variant="ghost" size="sm" className="h-7 px-2" onClick={() => setRawResponseMessage(message)}>
-                                <Code2 className="h-3.5 w-3.5" />
-                                {t('apiTest.viewRawResponse')}
-                              </Button>
-                            )}
-                            <Button type="button" variant="ghost" size="sm" className="h-7 px-2" onClick={() => retryFromMessage(message.id)} disabled={isLoading}>
-                              <RefreshCw className="h-3.5 w-3.5" />
-                              {t('apiTest.retryMessage')}
-                            </Button>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )
-                })
-              )}
-            </div>
-
-            <form onSubmit={handleSubmit} className="border-t p-4">
-              <div className="flex gap-3">
-                <Textarea
-                  value={inputValue}
-                  onChange={(event) => setInputValue(event.target.value)}
-                  placeholder={t('apiTest.messagePlaceholder')}
-                  rows={3}
-                  className="min-h-[76px] resize-none"
-                  disabled={isLoading}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
-                      event.preventDefault()
-                      void sendConversation()
-                    }
-                  }}
-                />
-                {isLoading ? (
-                  <Button type="button" variant="outline" className="self-end" onClick={handleStopStreaming}>
-                    <Square className="h-4 w-4" />
-                    {t('apiTest.stopGeneration')}
-                  </Button>
-                ) : (
-                  <Button type="submit" className="self-end" disabled={!inputValue.trim()}>
-                    <Send className="h-4 w-4" />
-                    {t('apiTest.send')}
-                  </Button>
+              <div className="space-y-2 border-t pt-3">
+                <div className="flex items-center justify-between gap-2">
+                  <button
+                    type="button"
+                    aria-expanded={requestBodyOpen}
+                    className="flex flex-1 items-center gap-1.5 text-left text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+                    onClick={() => setRequestBodyOpen((open) => !open)}
+                  >
+                    {requestBodyOpen ? (
+                      <ChevronDown className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                    ) : (
+                      <ChevronRight className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                    )}
+                    <span>{t('apiTest.requestBody')}</span>
+                  </button>
+                  <IconActionButton
+                    label={t('apiTest.copyRequestBody')}
+                    tooltip={copiedTarget === 'request-body' ? t('apiTest.copied') : t('apiTest.copyRequestBody')}
+                    className="h-6 w-6 text-muted-foreground hover:text-foreground"
+                    onClick={() => void copyWithFeedback('request-body', requestBody)}
+                  >
+                    {copiedTarget === 'request-body' ? (
+                      <Check aria-hidden="true" className="text-emerald-500" />
+                    ) : (
+                      <Copy aria-hidden="true" />
+                    )}
+                  </IconActionButton>
+                </div>
+                {requestBodyOpen && (
+                  <Textarea
+                    aria-label={t('apiTest.requestBody')}
+                    value={requestBody}
+                    onChange={(event) => handleRequestBodyChange(event.target.value)}
+                    rows={7}
+                    className="font-mono text-xs leading-relaxed"
+                  />
                 )}
               </div>
-            </form>
-          </CardContent>
-        </Card>
-      </div>
+            </CardContent>
+          </Card>
+
+          <Card className="flex flex-col min-h-[560px] xl:h-[calc(100vh-11rem)] overflow-hidden">
+            <CardContent className="flex flex-1 min-h-0 flex-col p-0">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b px-4 py-2.5">
+                <div className="flex min-w-0 items-center gap-2">
+                  <Bot className="h-4 w-4 shrink-0 text-primary dark:text-foreground" aria-hidden="true" />
+                  <h2 className="text-sm font-semibold shrink-0">{t('apiTest.conversation')}</h2>
+                  {modelValue && (
+                    <Badge
+                      variant="secondary"
+                      className="hidden sm:inline-flex max-w-[220px] truncate px-2 py-0 font-mono text-[11px] font-normal"
+                    >
+                      {modelValue}{channelKey ? ` @${channelKey}` : ''}
+                    </Badge>
+                  )}
+                </div>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  {statusCode !== null && (
+                    <>
+                      <Badge variant={statusCode === 200 ? 'success' : 'destructive'} className="px-2 py-0 text-[11px]">
+                        {statusCode === 200 ? (
+                          <CheckCircle className="mr-1 h-3 w-3" aria-hidden="true" />
+                        ) : (
+                          <X className="mr-1 h-3 w-3" aria-hidden="true" />
+                        )}
+                        {statusCode}
+                      </Badge>
+                      <Badge variant="outline" className="px-2 py-0 text-[11px] font-mono">
+                        <Clock className="mr-1 h-3 w-3" aria-hidden="true" />
+                        {responseTime}ms
+                      </Badge>
+                    </>
+                  )}
+                  <IconActionButton
+                    label={t('apiTest.copyResponse')}
+                    tooltip={copiedTarget === 'conversation' ? t('apiTest.copied') : t('apiTest.copyResponse')}
+                    className="text-muted-foreground hover:text-foreground"
+                    disabled={messages.length === 0}
+                    onClick={handleCopyMessages}
+                  >
+                    {copiedTarget === 'conversation' ? (
+                      <Check aria-hidden="true" className="text-emerald-500" />
+                    ) : (
+                      <Copy aria-hidden="true" />
+                    )}
+                  </IconActionButton>
+                  <IconActionButton
+                    label={t('apiTest.clearConversation')}
+                    className="text-muted-foreground hover:text-destructive"
+                    disabled={messages.length === 0 || isLoading}
+                    onClick={handleClearConversation}
+                  >
+                    <Trash2 aria-hidden="true" />
+                  </IconActionButton>
+                </div>
+              </div>
+
+              <div ref={messageListRef} className="flex-1 min-h-0 space-y-3 overflow-y-auto p-4 scrollbar-thin">
+                {messages.length === 0 ? (
+                  <div className="flex h-full min-h-[320px] flex-col items-center justify-center px-6 text-center">
+                    <Bot className="mb-2.5 h-9 w-9 text-muted-foreground/35" aria-hidden="true" />
+                    <p className="max-w-xs text-xs leading-relaxed text-muted-foreground">{t('apiTest.conversationEmpty')}</p>
+                  </div>
+                ) : (
+                  messages.map((message, index) => {
+                    const isUser = message.role === 'user'
+                    const isEditing = editingMessageId === message.id
+                    const messageNumber = index + 1
+                    const copyTargetId = `message-${message.id}`
+                    const actionButtonTone = isUser
+                      ? 'h-6 w-6 text-primary-foreground/70 hover:bg-primary-foreground/15 hover:text-primary-foreground focus-visible:ring-primary-foreground/40'
+                      : 'h-6 w-6 text-muted-foreground hover:bg-muted hover:text-foreground'
+
+                    return (
+                      <div key={message.id} className={cn('group/message flex', isUser ? 'justify-end' : 'justify-start')}>
+                        <div
+                          className={cn(
+                            'max-w-[85%] space-y-1.5 rounded-xl border px-3.5 py-2.5',
+                            isUser
+                              ? 'border-primary/80 bg-primary text-primary-foreground dark:border-border'
+                              : 'border-border/60 bg-muted/50 text-foreground',
+                          )}
+                        >
+                          <div className="flex items-center justify-between gap-3 text-[11px]">
+                            <div className="flex min-w-0 items-center gap-1.5 opacity-80">
+                              {isUser ? (
+                                <User className="h-3 w-3 shrink-0" aria-hidden="true" />
+                              ) : (
+                                <Bot className="h-3 w-3 shrink-0" aria-hidden="true" />
+                              )}
+                              <span>{isUser ? t('apiTest.user') : t('apiTest.assistant')}</span>
+                              {message.status === 'streaming' && (
+                                <Badge variant="outline" className="px-1.5 py-0 text-[10px]">
+                                  {t('apiTest.streaming')}
+                                </Badge>
+                              )}
+                              {message.status === 'error' && (
+                                <Badge variant="destructive" className="px-1.5 py-0 text-[10px]">
+                                  {t('apiTest.responseFailed')}
+                                </Badge>
+                              )}
+                            </div>
+                            {(message.model || message.channelKey) && (
+                              <span className="max-w-[180px] truncate font-mono opacity-65">
+                                {message.model || ''}{message.channelKey ? ` @${message.channelKey}` : ''}
+                              </span>
+                            )}
+                          </div>
+
+                          {isEditing ? (
+                            <div className="space-y-2 pt-0.5">
+                              <Textarea
+                                aria-label={`${t('apiTest.editMessage')} (${messageNumber})`}
+                                value={editingContent}
+                                onChange={(event) => setEditingContent(event.target.value)}
+                                rows={3}
+                                className="min-h-[72px] bg-background text-foreground text-sm"
+                                onKeyDown={(event) => {
+                                  if (event.key === 'Escape') {
+                                    event.preventDefault()
+                                    setEditingMessageId(null)
+                                  } else if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+                                    event.preventDefault()
+                                    saveEditedMessage()
+                                  }
+                                }}
+                              />
+                              <div className="flex justify-end gap-1">
+                                <IconActionButton
+                                  label={`${t('common.cancel')} (${messageNumber})`}
+                                  tooltip={t('common.cancel')}
+                                  className={actionButtonTone}
+                                  onClick={() => setEditingMessageId(null)}
+                                >
+                                  <X aria-hidden="true" />
+                                </IconActionButton>
+                                <IconActionButton
+                                  label={`${t('common.save')} (${messageNumber})`}
+                                  tooltip={t('common.save')}
+                                  className={actionButtonTone}
+                                  onClick={saveEditedMessage}
+                                >
+                                  <Check aria-hidden="true" />
+                                </IconActionButton>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="whitespace-pre-wrap break-words text-sm leading-relaxed">
+                              {message.content || (message.status === 'streaming' ? t('apiTest.streaming') : '')}
+                            </div>
+                          )}
+
+                          {!isEditing && (
+                            <div
+                              className={cn(
+                                'flex flex-wrap items-center gap-1 pt-0.5 opacity-75 transition-opacity group-hover/message:opacity-100 focus-within:opacity-100',
+                                isUser ? 'justify-end' : 'justify-start',
+                              )}
+                            >
+                              {isUser && (
+                                <IconActionButton
+                                  label={`${t('apiTest.editMessage')} (${messageNumber})`}
+                                  tooltip={t('apiTest.editMessage')}
+                                  className={actionButtonTone}
+                                  onClick={() => startEditingMessage(message)}
+                                  disabled={isLoading}
+                                >
+                                  <Edit3 aria-hidden="true" />
+                                </IconActionButton>
+                              )}
+                              {message.content && (
+                                <IconActionButton
+                                  label={`${t('apiTest.copyMessage')} (${messageNumber})`}
+                                  tooltip={copiedTarget === copyTargetId ? t('apiTest.copied') : t('apiTest.copyMessage')}
+                                  className={actionButtonTone}
+                                  onClick={() => void copyWithFeedback(copyTargetId, message.content)}
+                                >
+                                  {copiedTarget === copyTargetId ? (
+                                    <Check
+                                      aria-hidden="true"
+                                      className={isUser ? 'text-primary-foreground' : 'text-emerald-500'}
+                                    />
+                                  ) : (
+                                    <Copy aria-hidden="true" />
+                                  )}
+                                </IconActionButton>
+                              )}
+                              {!isUser && (message.rawResponse || message.rawResponseText) && (
+                                <IconActionButton
+                                  label={`${t('apiTest.viewRawResponse')} (${messageNumber})`}
+                                  tooltip={t('apiTest.viewRawResponse')}
+                                  className={actionButtonTone}
+                                  onClick={() => setRawResponseMessage(message)}
+                                >
+                                  <Code2 aria-hidden="true" />
+                                </IconActionButton>
+                              )}
+                              <IconActionButton
+                                label={`${t('apiTest.retryMessage')} (${messageNumber})`}
+                                tooltip={t('apiTest.retryMessage')}
+                                className={actionButtonTone}
+                                onClick={() => retryFromMessage(message.id)}
+                                disabled={isLoading}
+                              >
+                                <RefreshCw aria-hidden="true" />
+                              </IconActionButton>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })
+                )}
+              </div>
+
+              <form onSubmit={handleSubmit} className="border-t p-3">
+                <div className="flex items-end gap-2 rounded-xl border border-input bg-card px-3 py-2 transition-colors hover:border-muted-foreground/30 focus-within:border-primary/50">
+                  <Textarea
+                    aria-label={t('apiTest.messagePlaceholder')}
+                    value={inputValue}
+                    onChange={(event) => setInputValue(event.target.value)}
+                    placeholder={t('apiTest.messagePlaceholder')}
+                    rows={2}
+                    className="min-h-[44px] max-h-[160px] flex-1 resize-none border-0 bg-transparent p-0 text-sm leading-relaxed hover:border-transparent focus-visible:border-transparent"
+                    disabled={isLoading}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+                        event.preventDefault()
+                        void sendConversation()
+                      }
+                    }}
+                  />
+                  {isLoading ? (
+                    <IconActionButton
+                      label={t('apiTest.stopGeneration')}
+                      variant="secondary"
+                      className="h-8 w-8 shrink-0 rounded-lg text-destructive hover:bg-destructive/10 hover:text-destructive"
+                      onClick={handleStopStreaming}
+                    >
+                      <Square aria-hidden="true" className="fill-current" />
+                    </IconActionButton>
+                  ) : (
+                    <IconActionButton
+                      type="submit"
+                      label={t('apiTest.send')}
+                      tooltip={`${t('apiTest.send')} (Ctrl/⌘ + Enter)`}
+                      variant="default"
+                      className="h-8 w-8 shrink-0 rounded-lg dark:border dark:border-white/10"
+                      disabled={!inputValue.trim()}
+                    >
+                      <Send aria-hidden="true" />
+                    </IconActionButton>
+                  )}
+                </div>
+              </form>
+            </CardContent>
+          </Card>
+        </div>
+      </TooltipProvider>
     </PageContainer>
   )
 }

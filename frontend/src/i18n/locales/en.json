@@ -437,7 +437,12 @@
     "noMatchingModels": "No matching models",
     "tokenRequired": "Please enter an API token",
     "bodyJsonError": "Invalid request body JSON",
-    "copyResponse": "Copy response"
+    "copyResponse": "Copy conversation",
+    "copyMessage": "Copy message",
+    "copyRequestBody": "Copy request body",
+    "clearConversation": "Clear conversation",
+    "resetParams": "Reset parameters",
+    "copied": "Copied"
   },
   "settings": {
     "title": "Settings",

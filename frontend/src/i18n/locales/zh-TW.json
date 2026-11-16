@@ -437,7 +437,12 @@
     "noMatchingModels": "沒有匹配的模型",
     "tokenRequired": "請輸入 API 令牌",
     "bodyJsonError": "請求體 JSON 格式錯誤",
-    "copyResponse": "複製回應"
+    "copyResponse": "複製會話",
+    "copyMessage": "複製訊息",
+    "copyRequestBody": "複製請求體",
+    "clearConversation": "清空會話",
+    "resetParams": "重設參數",
+    "copied": "已複製"
   },
   "settings": {
     "title": "系統設定",
