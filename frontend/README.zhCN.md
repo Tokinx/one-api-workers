@@ -74,7 +74,7 @@ src/
 - **Channels**：管理 OpenAI、Azure OpenAI、Claude、Gemini、Responses、Audio 等渠道，支持权重、重试与轮换
 - **Tokens**：创建与管理 API Token，配置渠道访问范围与额度限制
 - **Pricing**：配置模型定价策略（按量、按次或免费）
-- **API Test**：在后台直接测试各类代理接口（`/v1/chat/completions`、`/v1/messages`、`/v1/responses`、`/v1/audio/speech`）
+- **API Test**：内置对话式操练场，支持 `/v1/chat/completions` 与 `/v1/messages` 参数调节、流式输出与原始响应查看
 - **System Settings**：管理 Telegram 二次验证、金额显示精度与 API 文档开关
 - **Login**：管理员认证界面，支持 session cookie 维持与 Telegram 验证码
 

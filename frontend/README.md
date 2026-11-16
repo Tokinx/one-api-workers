@@ -74,7 +74,7 @@ If you open `http://127.0.0.1:5173` directly, set `VITE_API_BASE_URL=http://127.
 - **Channels**: Manage OpenAI, Azure OpenAI, Claude, Gemini, Responses, and Audio channels with key rotation and retry
 - **Tokens**: Create and manage API tokens with quota limits and channel access scopes
 - **Pricing**: Configure model pricing (volume-based, request-based, or free)
-- **API Test**: Test API endpoints (`/v1/chat/completions`, `/v1/messages`, `/v1/responses`, `/v1/audio/speech`) with live responses
+- **API Test**: Built-in Playground for `/v1/chat/completions` and `/v1/messages` with parameter controls, streaming responses, and raw response inspection
 - **System Settings**: Configure Telegram 2FA, currency display precision, and API docs toggle
 - **Login**: Admin authentication with session cookies and optional Telegram verification code
 

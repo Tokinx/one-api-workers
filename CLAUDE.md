@@ -13,13 +13,15 @@ bun install                          # 安装所有依赖（Bun workspaces，根
 bun run dev                          # 同时启动 Vite 前端 (5173) + Worker 本地 (默认 8787)
 bun run dev:worker                   # 仅启动 Worker（wrangler.local.jsonc，默认 localhost:8787）
 bun run dev:web                      # 仅启动前端 Vite 开发服务器
-bun run build                        # 构建前端到 public/（含 tsc 类型检查）
+bun run typecheck                    # 仅执行 Worker 与前端 TypeScript 类型检查
+bun run build                        # 类型检查并构建前端到 public/
 bun run deploy                       # 构建 + 部署到 Cloudflare
 bun run cf-typegen                   # 生成 Cloudflare 绑定类型到 worker-configuration.d.ts
 cd frontend && bun run lint          # 前端 ESLint 检查
+bun test tests                       # 运行单元测试与隔离的本地 D1 回归测试
 ```
 
-无专用测试框架；`bun run build` 和 `cd frontend && bun run lint` 是最小验证。仓库提供本地 E2E 脚本，需先启动 mock upstream 与本地 Worker：
+日常最小验证为 `bun run build` 和 `cd frontend && bun run lint`，专项回归测试使用 `bun test tests`（不会修改已有本地或生产 D1 数据）。仓库同时提供本地 E2E 脚本，需先启动 mock upstream 与本地 Worker：
 
 ```bash
 bun run tests/mock-upstream.ts        # 启动模拟上游，默认 :9999

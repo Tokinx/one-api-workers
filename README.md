@@ -66,7 +66,7 @@ Current admin pages:
 - `Channels`: channel config, weights, auto retry/rotation, model mapping, pull upstream model lists
 - `Tokens`: API token management, channel access scope, quotas, usage reset
 - `Pricing`: global model pricing; per-token and per-request billing
-- `API Test`: test `/v1/chat/completions`, `/v1/messages`, `/v1/responses`, `/v1/audio/speech` from the console
+- `API Test`: built-in Playground to test `/v1/chat/completions` and `/v1/messages` with parameter controls and conversation history
 - `System Settings`: Telegram admin verification, currency display precision, API docs toggle
 
 ## Project Structure
@@ -88,7 +88,7 @@ one-api-workers/
 │   └── package.json              # Frontend build and lint
 ├── public/                       # Frontend build output, served by the Worker
 ├── docs/                         # Usage and security docs
-├── tests/                        # Mock upstream + local E2E scripts
+├── tests/                        # Unit/regression tests (bun test tests), mock upstream, and local E2E scripts
 ├── wrangler.jsonc                # Production config
 ├── wrangler.local.jsonc          # Local Worker config
 ├── type.d.ts                     # Worker bindings and shared types

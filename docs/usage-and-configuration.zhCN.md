@@ -104,23 +104,22 @@ curl https://your-domain.com/v1/models \
 
 ### API 测试工具
 
-管理界面内置 API 测试工具，无需额外工具即可调试请求。
+管理界面内置交互式操练场（Playground），无需额外工具即可调试对话请求。
 
 功能特性：
 
-- 一键测试：直接在 Web 界面中测试 API 调用
-- JSON 编辑器：支持 JSON 格式验证和语法高亮
-- 实时响应：显示响应时间、状态码和完整响应内容
-- 错误诊断：自动区分 HTTP 错误和 JSON 响应，便于排查问题
-- 一键复制：支持复制 Token 和响应内容
+- 对话式测试：支持 `/v1/chat/completions` 与 `/v1/messages` 多轮对话测试
+- 智能筛选：按所选 Token 自动过滤可用模型与渠道（支持直接留空自动路由渠道）
+- 参数调节：支持按接口调节 `temperature`、`top_p`、`frequency_penalty`、`presence_penalty`、`stream`、`max_tokens`、`seed`，并可展开自定义请求体 JSON
+- 实时观测：支持流式输出与中断生成、编辑并重试历史消息、显示状态码与耗时、查看原始响应体
 
 使用步骤：
 
 1. 访问管理界面，切换到 **API 测试**
-2. 输入 API Token
-3. 编辑请求 JSON
-4. 点击 **发送请求**
-5. 查看响应结果和状态信息
+2. 选择 API Token、模型、可选渠道及接口端点
+3. 调整参数，或按需展开 **请求体** 补充自定义 JSON 字段
+4. 输入提示词并点击 **发送**
+5. 查看实时回复结果，必要时点击查看 **原始响应** 排查报文
 
 ## 管理功能
 
@@ -153,11 +152,11 @@ curl https://your-domain.com/v1/models \
   "name": "My OpenAI Channel",
   "type": "openai",
   "endpoint": "https://api.openai.com/v1/",
-  "api_key": "sk-your-openai-api-key",
-  "deployment_mapper": {
-    "gpt-4": "gpt-4",
-    "gpt-3.5-turbo": "gpt-3.5-turbo"
-  }
+  "api_keys": ["sk-your-openai-api-key"],
+  "models": [
+    { "id": "gpt-4o", "name": "gpt-4o", "enabled": true },
+    { "id": "gpt-4o-mini", "name": "gpt-4o-mini", "enabled": true }
+  ]
 }
 ```
 
@@ -170,27 +169,27 @@ Gemini 通过官方 OpenAI 兼容层接入，建议将 `endpoint` 配置为 `htt
   "name": "My Gemini Channel",
   "type": "gemini",
   "endpoint": "https://generativelanguage.googleapis.com/v1beta/openai/",
-  "api_key": "AIza-your-gemini-api-key",
-  "deployment_mapper": {
-    "gemini-2.5-flash": "gemini-2.5-flash",
-    "gemini-2.5-pro": "gemini-2.5-pro"
-  }
+  "api_keys": ["AIza-your-gemini-api-key"],
+  "models": [
+    { "id": "gemini-2.5-flash", "name": "gemini-2.5-flash", "enabled": true },
+    { "id": "gemini-2.5-pro", "name": "gemini-2.5-pro", "enabled": true }
+  ]
 }
 ```
 
 #### Azure OpenAI
+
+Azure 渠道默认直接走资源主机的 Azure OpenAI v1 路径（`/openai/v1/...`），无需填写 `api_version`。
 
 ```json
 {
   "name": "My Azure OpenAI",
   "type": "azure-openai",
   "endpoint": "https://your-resource.openai.azure.com/",
-  "api_key": "your-azure-api-key",
-  "api_version": "2024-02-15-preview",
-  "deployment_mapper": {
-    "gpt-4": "gpt-4-deployment-name",
-    "gpt-3.5-turbo": "gpt-35-turbo-deployment-name"
-  }
+  "api_keys": ["your-azure-api-key"],
+  "models": [
+    { "id": "gpt-4o-deployment-name", "name": "gpt-4o", "enabled": true }
+  ]
 }
 ```
 
@@ -201,11 +200,10 @@ Gemini 通过官方 OpenAI 兼容层接入，建议将 `endpoint` 配置为 `htt
   "name": "My Claude Channel",
   "type": "claude",
   "endpoint": "https://api.anthropic.com/v1/",
-  "api_key": "sk-your-claude-api-key",
-  "api_version": "2023-06-01",
-  "deployment_mapper": {
-    "claude-3-5-sonnet-20241022": "claude-3-5-sonnet-20241022"
-  }
+  "api_keys": ["sk-your-claude-api-key"],
+  "models": [
+    { "id": "claude-3-5-sonnet-20241022", "name": "claude-3-5-sonnet-20241022", "enabled": true }
+  ]
 }
 ```
 
@@ -216,10 +214,10 @@ Gemini 通过官方 OpenAI 兼容层接入，建议将 `endpoint` 配置为 `htt
   "name": "My OpenAI Responses",
   "type": "openai-responses",
   "endpoint": "https://api.openai.com/v1/",
-  "api_key": "sk-your-openai-api-key",
-  "deployment_mapper": {
-    "gpt-5.1-codex-max": "gpt-5.1-codex-max"
-  }
+  "api_keys": ["sk-your-openai-api-key"],
+  "models": [
+    { "id": "gpt-5.1-codex-max", "name": "gpt-5.1-codex-max", "enabled": true }
+  ]
 }
 ```
 
@@ -230,10 +228,10 @@ Gemini 通过官方 OpenAI 兼容层接入，建议将 `endpoint` 配置为 `htt
   "name": "My Azure Responses",
   "type": "azure-openai-responses",
   "endpoint": "https://your-resource.openai.azure.com/",
-  "api_key": "your-azure-api-key",
-  "deployment_mapper": {
-    "gpt-5.1-codex-max": "your-deployment-name"
-  }
+  "api_keys": ["your-azure-api-key"],
+  "models": [
+    { "id": "your-deployment-name", "name": "gpt-5.1-codex-max", "enabled": true }
+  ]
 }
 ```
 
@@ -246,10 +244,10 @@ Gemini 通过官方 OpenAI 兼容层接入，建议将 `endpoint` 配置为 `htt
   "name": "My Claude to OpenAI",
   "type": "claude-to-openai",
   "endpoint": "https://api.openai.com/v1/",
-  "api_key": "sk-your-openai-api-key",
-  "deployment_mapper": {
-    "claude-3-5-sonnet-20241022": "gpt-4o"
-  }
+  "api_keys": ["sk-your-openai-api-key"],
+  "models": [
+    { "id": "gpt-4o", "name": "claude-3-5-sonnet-20241022", "enabled": true }
+  ]
 }
 ```
 
@@ -260,11 +258,11 @@ Gemini 通过官方 OpenAI 兼容层接入，建议将 `endpoint` 配置为 `htt
   "name": "My OpenAI Audio",
   "type": "openai-audio",
   "endpoint": "https://api.openai.com/v1/",
-  "api_key": "sk-your-openai-api-key",
-  "deployment_mapper": {
-    "tts-1": "tts-1",
-    "tts-1-hd": "tts-1-hd"
-  }
+  "api_keys": ["sk-your-openai-api-key"],
+  "models": [
+    { "id": "tts-1", "name": "tts-1", "enabled": true },
+    { "id": "tts-1-hd", "name": "tts-1-hd", "enabled": true }
+  ]
 }
 ```
 
@@ -275,11 +273,10 @@ Gemini 通过官方 OpenAI 兼容层接入，建议将 `endpoint` 配置为 `htt
   "name": "My Azure Audio",
   "type": "azure-openai-audio",
   "endpoint": "https://your-resource.openai.azure.com/",
-  "api_key": "your-azure-api-key",
-  "api_version": "2024-02-15-preview",
-  "deployment_mapper": {
-    "tts-1": "your-tts-deployment-name"
-  }
+  "api_keys": ["your-azure-api-key"],
+  "models": [
+    { "id": "your-tts-deployment-name", "name": "tts-1", "enabled": true }
+  ]
 }
 ```
 
@@ -287,10 +284,15 @@ Gemini 通过官方 OpenAI 兼容层接入，建议将 `endpoint` 配置为 `htt
 
 - `name`：渠道显示名称
 - `type`：服务商类型，支持 `openai`、`gemini`、`azure-openai`、`claude`、`claude-to-openai`、`openai-responses`、`azure-openai-responses`、`openai-audio`、`azure-openai-audio`
-- `endpoint`：API 端点地址
-- `api_key`：API 密钥
-- `api_version`：API 版本，Azure OpenAI / Claude / Azure Audio 可用；Azure Responses v1 请留空
-- `deployment_mapper`：模型名称映射关系，用于自定义外部模型名与上游部署名的映射
+- `endpoint`：API 端点地址（末尾加 `#` 可跳过自动路径拼接并原样请求该 URL）
+- `enabled`：是否参与路由（默认 `true`）
+- `weight`：权重优先级（`0`–`5`，默认 `0`）
+- `api_keys`：上游 API 密钥列表（支持多 Key 随机选取与重试轮换）
+- `auto_retry` / `auto_rotate`：可重试失败时自动重试（最多 3 次）及在同渠道内轮换 Key（默认均为 `true`）
+- `models`：模型映射数组（`{ id, name, enabled?, default_params? }`），将对外模型名 `name` 映射到上游模型 `id`
+- `model_pricing`：可选的渠道级模型定价覆盖（`{ billingMode, input, output, cache }`）
+
+> 提示：读取或保存渠道时仍会自动兼容旧版 `api_key`、`supported_models` 和 `deployment_mapper` 字段并归一化为 `api_keys` 与 `models`；`api_version` 不再存储或透传（`claude` 固定发送 `anthropic-version: 2023-06-01`，Azure 渠道直接请求 `/openai/v1/...`）。
 
 ### Token 配置
 

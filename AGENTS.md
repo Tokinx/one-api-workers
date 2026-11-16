@@ -12,12 +12,14 @@
 - `type.d.ts`: shared types for bindings and data models.
 
 ## Build, Test, and Development Commands
-- `bun run build`: Type-checks and builds the admin UI into `public/`.
+- `bun run typecheck`: Runs Worker and frontend TypeScript checks without building assets.
+- `bun run build`: Runs full TypeScript checks (Worker + frontend) and builds the admin UI into `public/`.
 - `bun run --filter frontend build`: Builds only the admin UI from the frontend workspace.
 - `bun run dev`: Starts the Vite frontend and Worker locally for integrated development.
 - `bun run dev:worker`: Runs only the Worker locally via `wrangler dev --config wrangler.local.jsonc`.
 - `bun run deploy`: Deploys the Worker to Cloudflare.
 - `bun run cf-typegen`: Generates Cloudflare bindings/types.
+- `bun test tests`: Runs unit and isolated local D1 regression tests.
 
 ## Coding Style & Naming Conventions
 - TypeScript throughout; follow existing patterns and file layout.
@@ -26,7 +28,7 @@
 - Channel types: use string literals (e.g., `openai-responses`, `azure-openai-responses`).
 
 ## Testing & Lint
-- Minimal checks: `bun run build` (runs frontend TypeScript check + Vite build) and `cd frontend && bun run lint` (ESLint).
+- Minimal checks: `bun run build` (runs Worker + frontend TypeScript checks and Vite build), `cd frontend && bun run lint` (ESLint), and `bun test tests` (unit and D1 regression tests).
 - Local E2E test suite available under `tests/` (see `docs/testing.md`):
   1. `bun run tests/mock-upstream.ts` (starts mock upstream on `:9999`)
   2. `bun run dev:worker` (starts local Worker on `:8787`)
@@ -45,4 +47,4 @@
 - Admin auth primarily uses session cookies (`oaw_admin_session`) with login rate-limiting and optional Telegram 2FA. `x-admin-token` header is accepted when Telegram 2FA is disabled.
 - Tokens and channel configs are stored in D1; validate permissions and quotas.
 - Token quota (`total_quota`) uses raw integer billing units (`1,000,000,000` raw units = $1.00 USD, or `-1` for unlimited).
-- For Azure Responses v1, leave `api_version` empty and set `endpoint` to the resource host.
+- For Azure v1 endpoints (`azure-openai`, `azure-openai-audio`, `azure-openai-responses`), set `endpoint` to the resource host (e.g., `https://your-resource.openai.azure.com/`); requests target `/openai/v1/...` automatically without `api_version`.

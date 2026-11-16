@@ -67,7 +67,7 @@ bun run deploy
 - `Channels`：渠道配置、权重、自动重试/轮换、模型映射、拉取上游模型列表
 - `Tokens`：API Token 管理、渠道访问范围、额度限制、用量重置
 - `Pricing`：全局模型定价编辑，支持按量和按次计费
-- `API Test`：直接在后台测试 `/v1/chat/completions`、`/v1/messages`、`/v1/responses`、`/v1/audio/speech`
+- `API Test`：内置对话式操练场，支持测试 `/v1/chat/completions` 与 `/v1/messages`、参数调节与多轮对话
 - `System Settings`：Telegram 管理员验证、金额显示精度、API 文档开关
 
 ## 项目结构
@@ -89,7 +89,7 @@ one-api-workers/
 │   └── package.json              # 前端构建与 lint
 ├── public/                       # 前端构建产物，由 Worker 直接托管
 ├── docs/                         # 使用文档与安全文档
-├── tests/                        # Mock upstream + 本地 E2E 脚本
+├── tests/                        # 单元/回归测试（bun test tests）、Mock upstream 与本地 E2E 脚本
 ├── wrangler.jsonc                # 生产配置
 ├── wrangler.local.jsonc          # 本地 Worker 配置
 ├── type.d.ts                     # Worker 绑定与共享类型

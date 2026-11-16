@@ -104,23 +104,22 @@ curl https://your-domain.com/v1/models \
 
 ### API Test tool
 
-The admin UI includes a built-in API tester—no extra tools required.
+The admin UI includes a built-in Playground for interactive testing—no extra tools required.
 
 Features:
 
-- One-click tests from the web UI
-- JSON editor with validation and syntax highlighting
-- Live response: latency, status code, and full body
-- Error diagnosis: separates HTTP errors from JSON response bodies
-- One-click copy for tokens and responses
+- Multi-turn chat Playground supporting `/v1/chat/completions` and `/v1/messages`
+- Smart selectors for tokens, accessible models, and target channels (auto-filtered by token and model)
+- Parameter controls (`temperature`, `top_p`, `frequency_penalty`, `presence_penalty`, `stream`, `max_tokens`, `seed`, filtered by endpoint) plus a collapsible custom request-body JSON editor
+- Live streaming output with stop control, message edit/retry, status code & latency badges, and a raw response viewer
 
 Steps:
 
 1. Open the admin UI and switch to **API Test**
-2. Enter an API token
-3. Edit the request JSON
-4. Click **Send**
-5. Inspect the response and status
+2. Select an API token, model, optional channel, and endpoint
+3. Adjust parameters or expand **Request Body** if custom JSON fields are needed
+4. Enter a prompt and click **Send**
+5. Inspect the streamed or non-streamed reply and open **Raw Response** when debugging payloads
 
 ## Admin Features
 
@@ -153,11 +152,11 @@ Supported providers:
   "name": "My OpenAI Channel",
   "type": "openai",
   "endpoint": "https://api.openai.com/v1/",
-  "api_key": "sk-your-openai-api-key",
-  "deployment_mapper": {
-    "gpt-4": "gpt-4",
-    "gpt-3.5-turbo": "gpt-3.5-turbo"
-  }
+  "api_keys": ["sk-your-openai-api-key"],
+  "models": [
+    { "id": "gpt-4o", "name": "gpt-4o", "enabled": true },
+    { "id": "gpt-4o-mini", "name": "gpt-4o-mini", "enabled": true }
+  ]
 }
 ```
 
@@ -170,27 +169,27 @@ Gemini uses the official OpenAI-compatible layer. Prefer `endpoint` set to `http
   "name": "My Gemini Channel",
   "type": "gemini",
   "endpoint": "https://generativelanguage.googleapis.com/v1beta/openai/",
-  "api_key": "AIza-your-gemini-api-key",
-  "deployment_mapper": {
-    "gemini-2.5-flash": "gemini-2.5-flash",
-    "gemini-2.5-pro": "gemini-2.5-pro"
-  }
+  "api_keys": ["AIza-your-gemini-api-key"],
+  "models": [
+    { "id": "gemini-2.5-flash", "name": "gemini-2.5-flash", "enabled": true },
+    { "id": "gemini-2.5-pro", "name": "gemini-2.5-pro", "enabled": true }
+  ]
 }
 ```
 
 #### Azure OpenAI
+
+Azure channels target Azure OpenAI v1 (`/openai/v1/...`) directly from the resource host—no `api_version` is required.
 
 ```json
 {
   "name": "My Azure OpenAI",
   "type": "azure-openai",
   "endpoint": "https://your-resource.openai.azure.com/",
-  "api_key": "your-azure-api-key",
-  "api_version": "2024-02-15-preview",
-  "deployment_mapper": {
-    "gpt-4": "gpt-4-deployment-name",
-    "gpt-3.5-turbo": "gpt-35-turbo-deployment-name"
-  }
+  "api_keys": ["your-azure-api-key"],
+  "models": [
+    { "id": "gpt-4o-deployment-name", "name": "gpt-4o", "enabled": true }
+  ]
 }
 ```
 
@@ -201,11 +200,10 @@ Gemini uses the official OpenAI-compatible layer. Prefer `endpoint` set to `http
   "name": "My Claude Channel",
   "type": "claude",
   "endpoint": "https://api.anthropic.com/v1/",
-  "api_key": "sk-your-claude-api-key",
-  "api_version": "2023-06-01",
-  "deployment_mapper": {
-    "claude-3-5-sonnet-20241022": "claude-3-5-sonnet-20241022"
-  }
+  "api_keys": ["sk-your-claude-api-key"],
+  "models": [
+    { "id": "claude-3-5-sonnet-20241022", "name": "claude-3-5-sonnet-20241022", "enabled": true }
+  ]
 }
 ```
 
@@ -216,10 +214,10 @@ Gemini uses the official OpenAI-compatible layer. Prefer `endpoint` set to `http
   "name": "My OpenAI Responses",
   "type": "openai-responses",
   "endpoint": "https://api.openai.com/v1/",
-  "api_key": "sk-your-openai-api-key",
-  "deployment_mapper": {
-    "gpt-5.1-codex-max": "gpt-5.1-codex-max"
-  }
+  "api_keys": ["sk-your-openai-api-key"],
+  "models": [
+    { "id": "gpt-5.1-codex-max", "name": "gpt-5.1-codex-max", "enabled": true }
+  ]
 }
 ```
 
@@ -230,10 +228,10 @@ Gemini uses the official OpenAI-compatible layer. Prefer `endpoint` set to `http
   "name": "My Azure Responses",
   "type": "azure-openai-responses",
   "endpoint": "https://your-resource.openai.azure.com/",
-  "api_key": "your-azure-api-key",
-  "deployment_mapper": {
-    "gpt-5.1-codex-max": "your-deployment-name"
-  }
+  "api_keys": ["your-azure-api-key"],
+  "models": [
+    { "id": "your-deployment-name", "name": "gpt-5.1-codex-max", "enabled": true }
+  ]
 }
 ```
 
@@ -246,10 +244,10 @@ Converts Claude protocol requests into upstream OpenAI-compatible calls:
   "name": "My Claude to OpenAI",
   "type": "claude-to-openai",
   "endpoint": "https://api.openai.com/v1/",
-  "api_key": "sk-your-openai-api-key",
-  "deployment_mapper": {
-    "claude-3-5-sonnet-20241022": "gpt-4o"
-  }
+  "api_keys": ["sk-your-openai-api-key"],
+  "models": [
+    { "id": "gpt-4o", "name": "claude-3-5-sonnet-20241022", "enabled": true }
+  ]
 }
 ```
 
@@ -260,11 +258,11 @@ Converts Claude protocol requests into upstream OpenAI-compatible calls:
   "name": "My OpenAI Audio",
   "type": "openai-audio",
   "endpoint": "https://api.openai.com/v1/",
-  "api_key": "sk-your-openai-api-key",
-  "deployment_mapper": {
-    "tts-1": "tts-1",
-    "tts-1-hd": "tts-1-hd"
-  }
+  "api_keys": ["sk-your-openai-api-key"],
+  "models": [
+    { "id": "tts-1", "name": "tts-1", "enabled": true },
+    { "id": "tts-1-hd", "name": "tts-1-hd", "enabled": true }
+  ]
 }
 ```
 
@@ -275,11 +273,10 @@ Converts Claude protocol requests into upstream OpenAI-compatible calls:
   "name": "My Azure Audio",
   "type": "azure-openai-audio",
   "endpoint": "https://your-resource.openai.azure.com/",
-  "api_key": "your-azure-api-key",
-  "api_version": "2024-02-15-preview",
-  "deployment_mapper": {
-    "tts-1": "your-tts-deployment-name"
-  }
+  "api_keys": ["your-azure-api-key"],
+  "models": [
+    { "id": "your-tts-deployment-name", "name": "tts-1", "enabled": true }
+  ]
 }
 ```
 
@@ -287,10 +284,15 @@ Field notes:
 
 - `name`: display name
 - `type`: provider type — `openai`, `gemini`, `azure-openai`, `claude`, `claude-to-openai`, `openai-responses`, `azure-openai-responses`, `openai-audio`, `azure-openai-audio`
-- `endpoint`: API base URL
-- `api_key`: API key
-- `api_version`: used by Azure OpenAI / Claude / Azure Audio; leave empty for Azure Responses v1
-- `deployment_mapper`: maps external model names to upstream deployment names
+- `endpoint`: API base URL (append `#` to bypass automatic path joining and use the exact URL)
+- `enabled`: whether this channel participates in routing (defaults to `true`)
+- `weight`: priority weight `0`–`5` for weighted selection (defaults to `0`)
+- `api_keys`: list of upstream API keys (a request picks one randomly and can rotate on retries)
+- `auto_retry` / `auto_rotate`: retry up to 3 times and rotate keys within the channel on retryable errors (both default to `true`)
+- `models`: model mappings (`{ id, name, enabled?, default_params? }`) mapping external `name` to upstream `id`
+- `model_pricing`: optional channel-level pricing overrides (`{ billingMode, input, output, cache }`)
+
+> Note: Legacy `api_key`, `supported_models`, and `deployment_mapper` fields are still automatically normalized when loading or saving channels. `api_version` is not stored (`claude` sends `anthropic-version: 2023-06-01`, and Azure channels target `/openai/v1/...`).
 
 ### Token configuration
 
